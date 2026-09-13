@@ -37,14 +37,12 @@ jobs:
           mkdir -p folia-server/src/test/java/dev/multifolia/distributed
           git show origin/main:.github/multifolia/distributed-control-plane.java > folia-server/src/main/java/dev/multifolia/distributed/MultiFoliaDistributedControlPlane.java
           git show origin/main:.github/multifolia/management-command.patch > folia-server/paper-patches/features/0007-MultiFolia-management-command.patch
-          git show origin/main:.github/workflows/bootstrap-folia.yml > .github/workflows/bootstrap-folia.yml
           python3 - <<'PY'
           from pathlib import Path
           p = Path('settings.gradle.kts')
           p.write_text(p.read_text(encoding='utf-8').replace('rootProject.name = "folia"', 'rootProject.name = "multifolia"'), encoding='utf-8')
           p = Path('gradle.properties')
           text = p.read_text(encoding='utf-8').replace('group=dev.folia', 'group=dev.multifolia')
-          text = text.replace('paperRef=5563e58283f7771bd5ace9baad8b68614e37ad16', 'paperRef=5d4f9bd0e4f6b1ef70d07feb411580cef7d1a746')
           p.write_text(text, encoding='utf-8')
           Path('README.md').write_text('''# MultiFolia\n\nMultiFolia is a Folia 26.2 fork. Folia remains the execution engine and its regionized multithreading, schedulers, and thread-ownership checks remain authoritative.\n\n## Distributed foundation\n\nThe first phase provides a safe control plane for worker registration and single-writer region leases with fencing. Cross-worker live-region writes and world-file replication are disabled until a state-transfer protocol can preserve Folia ownership semantics.\n\n## Management\n\n`/multifolia` and `/mf` expose `servers`, `list`, `debug`, and `map` as observational management commands.\n\n## Plugins\n\nPriority Folia-compatible targets: AuthMe, CombatLog, EasyHome, EzRTP, Floodgate, Geyser, GrimAC, LuckPerms, PacketEvents, PASF, PlaceholderAPI, RaycastedAntiESP, SkinsRestorer, SnowballDamage, TAB, ViaBackwards, ViaVersion. Axiom is excluded.\n''', encoding='utf-8')
           Path('MULTIFOLIA_DISTRIBUTED_ARCHITECTURE.md').write_text('''# MultiFolia distributed architecture\n\nFolia remains authoritative for execution and thread ownership.\n\n- One worker owns a region at a time.\n- Every lease grant receives a monotonic fencing token.\n- Stale owners cannot renew or release.\n- Workers never directly write another worker's live region files.\n- Handoff requires explicit state transfer and acknowledgement before mutation by the new owner.\n\nThe current phase is only the in-process control plane. Network transport, persistent state transfer, routing, and failure recovery are intentionally not enabled yet.\n''', encoding='utf-8')
@@ -90,6 +88,33 @@ jobs:
             echo 'Forbidden MultiPaper reference remains'
             exit 1
           fi
+          mkdir -p .github/workflows
+          cat > .github/workflows/build.yml <<'EOF'
+          name: Build MultiFolia
+          on: [push, pull_request, workflow_dispatch]
+          permissions:
+            contents: read
+          jobs:
+            build:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-java@v5
+                  with:
+                    distribution: temurin
+                    java-version: '25'
+                - uses: gradle/actions/setup-gradle@v4
+                - run: git config --global user.email 'no-reply@github.com'
+                - run: git config --global user.name 'MultiFolia Automation'
+                - run: ./gradlew applyAllPatches --stacktrace
+                - run: ./gradlew build --stacktrace
+                - uses: actions/upload-artifact@v4
+                  with:
+                    name: multifolia
+                    path: |
+                      folia-server/build/libs/*.jar
+                      folia-api/build/libs/*.jar
+          EOF
           rm -rf .github/multifolia
           git add -A
           git commit -m 'Materialize official Folia 26.2 tree' || true
