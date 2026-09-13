@@ -73,7 +73,7 @@ jobs:
           test "$(find dist/multifolia-server -maxdepth 1 -type f -name '*.jar' | wc -l)" -eq 1
 
           # Verify that the server artifact has the expected Folia launcher.
-          unzip -p dist/multifolia-server/folia-server-26.2.local-SNAPSHOT.jar META-INF/MANIFEST.MF | grep -Fx 'Main-Class: org.bukkit.craftbukkit.Main'
+          unzip -p dist/multifolia-server/folia-server-26.2.local-SNAPSHOT.jar META-INF/MANIFEST.MF | grep 'Main-Class: org.bukkit.craftbukkit.Main'
 
           find dist -maxdepth 2 -type f -printf '%p %s bytes\n' | sort
 
