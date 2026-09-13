@@ -1,0 +1,326 @@
+name: Bootstrap MultiFolia conversion
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout conversion branch
+        uses: actions/checkout@v4
+        with:
+          ref: conversion/folia-26.2
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Replace repository with official Folia 26.2.x tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch ver/26.2.x https://github.com/PaperMC/Folia.git /tmp/folia
+          rsync -a --delete --exclude='.git' /tmp/folia/ ./
+          rm -rf /tmp/folia
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          Path('settings.gradle.kts').write_text(Path('settings.gradle.kts').read_text().replace('rootProject.name = "folia"', 'rootProject.name = "multifolia"'), encoding='utf-8')
+          Path('gradle.properties').write_text(Path('gradle.properties').read_text().replace('group=dev.folia', 'group=dev.multifolia'), encoding='utf-8')
+
+          Path('README.md').write_text('''# MultiFolia
+
+MultiFolia is a genuine Folia 26.2 fork. The server engine remains Folia's regionized multithreading architecture; MultiFolia adds an isolated distributed control plane intended for eventual multi-machine region ownership.
+
+## Foundation
+
+The source tree is imported from `PaperMC/Folia` branch `ver/26.2.x`. Folia's RegionScheduler, EntityScheduler, GlobalRegionScheduler, AsyncScheduler, threaded regions, and region ownership/thread-context checks remain the execution model. MultiFolia does not retain the MultiPaper server/master/messaging architecture.
+
+## Target
+
+- Minecraft 26.2
+- Java 25
+- Group: `dev.multifolia`
+- Upstream: `PaperMC/Folia` `ver/26.2.x`
+
+## Distributed layer
+
+Phase 1 is deliberately safe and incremental. `dev.multifolia.distributed` provides in-process worker registry, health state, region ownership leases, and fencing tokens. It does not perform shared-world concurrent writes, copied-world synchronization, or unsafe cross-worker mutation.
+
+The production target is Folia regions distributed across physical workers, with authenticated discovery, single-writer ownership, state transfer, region handoff, cross-region routing, failure fencing, and recovery. Those stages will only be enabled once they preserve Folia's region thread ownership rules.
+
+Syncthing/shared files are not used as a live world synchronization mechanism.
+
+## Commands
+
+The management namespace is `/multifolia` (optional `/mf`) with planned `servers`, `list`, `debug`, and `map` subcommands. Command registration will be layered into the server without disabling Folia safety checks.
+
+## Plugins
+
+MultiFolia expects Folia-compatible plugins. Paper compatibility is not assumed automatically. Priority targets include AuthMe, CombatLog, EasyHome, EzRTP, Floodgate, Geyser, GrimAC, LuckPerms, PacketEvents, PASF, PlaceholderAPI, RaycastedAntiESP, SkinsRestorer, SnowballDamage, TAB, ViaBackwards, and ViaVersion. Axiom is intentionally excluded.
+
+## Build
+
+```bash
+./gradlew applyAllPatches
+./gradlew build
+```
+''', encoding='utf-8')
+
+          Path('MULTIFOLIA_DISTRIBUTED_ARCHITECTURE.md').write_text('''# MultiFolia distributed architecture
+
+## Safety invariants
+
+- Folia remains the authoritative server engine.
+- One worker may hold the active lease for a region at a time.
+- Every lease acquisition receives a fencing token.
+- Stale workers cannot renew or release a lease without the correct token.
+- Region execution must continue under Folia's thread-context rules.
+- No worker directly writes another worker's live region files.
+- Ownership transfer requires an explicit state-transfer protocol and acknowledgement before a new owner starts mutation.
+
+## Current phase
+
+The repository currently contains only the local control-plane primitives: worker registration/health and thread-safe region lease/fencing state. Networking, durable state transfer, cross-worker routing, region handoff, failure detection, and recovery are intentionally not enabled yet.
+''', encoding='utf-8')
+          PY
+
+          mkdir -p folia-server/src/main/java/dev/multifolia/distributed
+          mkdir -p folia-server/src/test/java/dev/multifolia/distributed
+
+          cat > folia-server/src/main/java/dev/multifolia/distributed/RegionKey.java <<'EOF'
+          package dev.multifolia.distributed;
+          import java.util.Objects;
+          public record RegionKey(String worldKey, int regionX, int regionZ) {
+              public RegionKey {
+                  Objects.requireNonNull(worldKey, "worldKey");
+                  if (worldKey.isBlank()) throw new IllegalArgumentException("worldKey must not be blank");
+              }
+          }
+          EOF
+
+          cat > folia-server/src/main/java/dev/multifolia/distributed/WorkerState.java <<'EOF'
+          package dev.multifolia.distributed;
+          public enum WorkerState { REGISTERED, HEALTHY, DRAINING, UNHEALTHY, OFFLINE }
+          EOF
+
+          cat > folia-server/src/main/java/dev/multifolia/distributed/WorkerInfo.java <<'EOF'
+          package dev.multifolia.distributed;
+          import java.time.Instant;
+          import java.util.Objects;
+          public record WorkerInfo(String workerId, WorkerState state, Instant lastHeartbeat, String endpoint) {
+              public WorkerInfo {
+                  Objects.requireNonNull(workerId, "workerId");
+                  Objects.requireNonNull(state, "state");
+                  Objects.requireNonNull(lastHeartbeat, "lastHeartbeat");
+                  if (workerId.isBlank()) throw new IllegalArgumentException("workerId must not be blank");
+              }
+              public WorkerInfo heartbeat(Instant now) { return new WorkerInfo(workerId, WorkerState.HEALTHY, now, endpoint); }
+              public WorkerInfo withState(WorkerState value) { return new WorkerInfo(workerId, value, lastHeartbeat, endpoint); }
+          }
+          EOF
+
+          cat > folia-server/src/main/java/dev/multifolia/distributed/RegionLease.java <<'EOF'
+          package dev.multifolia.distributed;
+          public record RegionLease(String workerId, long fencingToken, long expiresAtNanos) {
+              public boolean isExpired(long nowNanos) { return nowNanos >= expiresAtNanos; }
+          }
+          EOF
+
+          cat > folia-server/src/main/java/dev/multifolia/distributed/RegionOwnershipTable.java <<'EOF'
+          package dev.multifolia.distributed;
+          import java.time.Duration;
+          import java.util.Map;
+          import java.util.Optional;
+          import java.util.concurrent.ConcurrentHashMap;
+          import java.util.concurrent.atomic.AtomicLong;
+          public final class RegionOwnershipTable {
+              private final Map<RegionKey, RegionLease> leases = new ConcurrentHashMap<>();
+              private final AtomicLong fencingTokens = new AtomicLong();
+              public Optional<RegionLease> current(RegionKey key) {
+                  RegionLease lease = leases.get(key);
+                  if (lease == null) return Optional.empty();
+                  if (lease.isExpired(System.nanoTime())) { leases.remove(key, lease); return Optional.empty(); }
+                  return Optional.of(lease);
+              }
+              public Optional<RegionLease> tryAcquire(RegionKey key, String workerId, Duration ttl) {
+                  if (ttl.isZero() || ttl.isNegative()) throw new IllegalArgumentException("ttl must be positive");
+                  long now = System.nanoTime();
+                  long expiry = Math.addExact(now, ttl.toNanos());
+                  RegionLease[] acquired = new RegionLease[1];
+                  leases.compute(key, (ignored, existing) -> {
+                      if (existing != null && !existing.isExpired(now) && !existing.workerId().equals(workerId)) return existing;
+                      RegionLease lease = new RegionLease(workerId, fencingTokens.incrementAndGet(), expiry);
+                      acquired[0] = lease;
+                      return lease;
+                  });
+                  return Optional.ofNullable(acquired[0]);
+              }
+              public boolean renew(RegionKey key, String workerId, long fencingToken, Duration ttl) {
+                  if (ttl.isZero() || ttl.isNegative()) throw new IllegalArgumentException("ttl must be positive");
+                  long expiry = Math.addExact(System.nanoTime(), ttl.toNanos());
+                  boolean[] renewed = new boolean[1];
+                  leases.computeIfPresent(key, (ignored, existing) -> {
+                      if (existing.workerId().equals(workerId) && existing.fencingToken() == fencingToken && !existing.isExpired(System.nanoTime())) {
+                          renewed[0] = true;
+                          return new RegionLease(workerId, fencingToken, expiry);
+                      }
+                      return existing;
+                  });
+                  return renewed[0];
+              }
+              public boolean release(RegionKey key, String workerId, long fencingToken) {
+                  RegionLease existing = leases.get(key);
+                  if (existing == null || !existing.workerId().equals(workerId) || existing.fencingToken() != fencingToken) return false;
+                  return leases.remove(key, existing);
+              }
+              public int size() { return leases.size(); }
+          }
+          EOF
+
+          cat > folia-server/src/main/java/dev/multifolia/distributed/WorkerRegistry.java <<'EOF'
+          package dev.multifolia.distributed;
+          import java.time.Duration;
+          import java.time.Instant;
+          import java.util.List;
+          import java.util.Map;
+          import java.util.concurrent.ConcurrentHashMap;
+          public final class WorkerRegistry {
+              private final Map<String, WorkerInfo> workers = new ConcurrentHashMap<>();
+              public WorkerInfo register(String workerId, String endpoint) {
+                  Instant now = Instant.now();
+                  return workers.compute(workerId, (ignored, existing) -> existing == null
+                      ? new WorkerInfo(workerId, WorkerState.REGISTERED, now, endpoint)
+                      : new WorkerInfo(workerId, existing.state(), now, endpoint));
+              }
+              public WorkerInfo heartbeat(String workerId) {
+                  WorkerInfo info = workers.computeIfPresent(workerId, (ignored, existing) -> existing.heartbeat(Instant.now()));
+                  if (info == null) throw new IllegalArgumentException("Unknown worker: " + workerId);
+                  return info;
+              }
+              public WorkerInfo state(String workerId, WorkerState state) {
+                  return workers.computeIfPresent(workerId, (ignored, existing) -> existing.withState(state));
+              }
+              public void expire(Duration timeout) {
+                  Instant cutoff = Instant.now().minus(timeout);
+                  workers.replaceAll((id, worker) -> worker.lastHeartbeat().isBefore(cutoff) ? worker.withState(WorkerState.UNHEALTHY) : worker);
+              }
+              public List<WorkerInfo> snapshot() { return workers.values().stream().sorted((a,b) -> a.workerId().compareTo(b.workerId())).toList(); }
+              public int size() { return workers.size(); }
+          }
+          EOF
+
+          cat > folia-server/src/main/java/dev/multifolia/distributed/MultiFoliaCluster.java <<'EOF'
+          package dev.multifolia.distributed;
+          import java.time.Duration;
+          import java.util.List;
+          import java.util.Optional;
+          public final class MultiFoliaCluster {
+              private final WorkerRegistry workers = new WorkerRegistry();
+              private final RegionOwnershipTable ownership = new RegionOwnershipTable();
+              public WorkerInfo registerWorker(String id, String endpoint) { return workers.register(id, endpoint); }
+              public WorkerInfo heartbeat(String id) { return workers.heartbeat(id); }
+              public Optional<RegionLease> acquireRegion(RegionKey key, String workerId, Duration ttl) { return ownership.tryAcquire(key, workerId, ttl); }
+              public boolean renewRegion(RegionKey key, String workerId, long token, Duration ttl) { return ownership.renew(key, workerId, token, ttl); }
+              public boolean releaseRegion(RegionKey key, String workerId, long token) { return ownership.release(key, workerId, token); }
+              public Optional<RegionLease> currentOwner(RegionKey key) { return ownership.current(key); }
+              public List<WorkerInfo> workers() { return workers.snapshot(); }
+              public int ownedRegionCount() { return ownership.size(); }
+          }
+          EOF
+
+          cat > folia-server/src/test/java/dev/multifolia/distributed/RegionOwnershipTableTest.java <<'EOF'
+          package dev.multifolia.distributed;
+          import static org.junit.jupiter.api.Assertions.*;
+          import java.time.Duration;
+          import org.junit.jupiter.api.Test;
+          class RegionOwnershipTableTest {
+              @Test void fencesHandoff() {
+                  RegionOwnershipTable table = new RegionOwnershipTable();
+                  RegionKey key = new RegionKey("minecraft:overworld", 3, 7);
+                  RegionLease first = table.tryAcquire(key, "worker-a", Duration.ofSeconds(5)).orElseThrow();
+                  assertTrue(table.tryAcquire(key, "worker-b", Duration.ofSeconds(5)).isEmpty());
+                  assertTrue(table.release(key, "worker-a", first.fencingToken()));
+                  RegionLease second = table.tryAcquire(key, "worker-b", Duration.ofSeconds(5)).orElseThrow();
+                  assertNotEquals(first.fencingToken(), second.fencingToken());
+                  assertFalse(table.release(key, "worker-a", first.fencingToken()));
+              }
+          }
+          EOF
+
+          cat > folia-server/src/test/java/dev/multifolia/distributed/WorkerRegistryTest.java <<'EOF'
+          package dev.multifolia.distributed;
+          import static org.junit.jupiter.api.Assertions.assertEquals;
+          import java.time.Duration;
+          import org.junit.jupiter.api.Test;
+          class WorkerRegistryTest {
+              @Test void heartbeatMarksWorkerHealthy() {
+                  WorkerRegistry registry = new WorkerRegistry();
+                  registry.register("worker-a", "127.0.0.1:25590");
+                  registry.heartbeat("worker-a");
+                  registry.expire(Duration.ofHours(1));
+                  assertEquals(WorkerState.HEALTHY, registry.snapshot().getFirst().state());
+              }
+          }
+          EOF
+
+          rm -f DEVELOPING_A_MULTISERVER_PLUGIN.md
+          rm -f assets/multifolia-diagram.jpg
+          rmdir assets 2>/dev/null || true
+
+          cat > .github/workflows/build.yml <<'EOF'
+          name: Build MultiFolia
+          on: [push, pull_request, workflow_dispatch]
+          permissions:
+            contents: read
+          jobs:
+            build:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-java@v5
+                  with:
+                    distribution: temurin
+                    java-version: '25'
+                - uses: gradle/actions/setup-gradle@v4
+                - run: ./gradlew applyAllPatches --stacktrace
+                - run: ./gradlew build --stacktrace
+                - uses: actions/upload-artifact@v4
+                  with:
+                    name: multifolia
+                    path: |
+                      folia-server/build/libs/*.jar
+                      folia-api/build/libs/*.jar
+          EOF
+
+          grep -RniE 'multipaper|MultiPaper|MULTIPAPER' . --exclude-dir=.git --exclude-dir=.gradle --exclude-dir=build && exit 1 || true
+          grep -q '^mcVersion=26.2$' gradle.properties
+          grep -q '^apiVersion=26.2$' gradle.properties
+          test -d folia-api && test -d folia-server && test -d folia-checkstyle && test -d build-data
+
+      - name: Apply patches and build converted Folia tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew applyAllPatches --stacktrace
+          ./gradlew build --stacktrace
+
+      - name: Commit imported Folia tree back to conversion branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email 'no-reply@github.com'
+          git config user.name 'Github Actions'
+          git add -A
+          git commit -m 'Replace MultiPaper foundation with Folia 26.2' || exit 0
+          git push origin HEAD:conversion/folia-26.2
