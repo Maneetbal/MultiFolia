@@ -25,6 +25,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Configure Git User Details
+        run: |
+          git config --global user.email "no-reply@github.com"
+          git config --global user.name "Github Actions"
+
       - name: Apply Folia Patches
         run: timeout 10m ./gradlew --no-daemon applyAllPatches --stacktrace
 
