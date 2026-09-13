@@ -24,6 +24,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.4.1'
 
       - name: Configure Git User Details
         run: |
@@ -31,10 +33,10 @@ jobs:
           git config --global user.name "Github Actions"
 
       - name: Apply Folia Patches
-        run: timeout 10m ./gradlew --no-daemon applyAllPatches --stacktrace
+        run: timeout 10m gradle --no-daemon applyAllPatches --stacktrace
 
       - name: Build MultiFolia
-        run: timeout 10m ./gradlew --no-daemon build --stacktrace
+        run: timeout 10m gradle --no-daemon build --stacktrace
 
       - name: Upload MultiFolia artifacts
         uses: actions/upload-artifact@v7
