@@ -1,14 +1,26 @@
 # MultiFolia
 
-MultiFolia is a Folia 26.2 fork focused on running a **single Minecraft world across multiple worker/server processes** while keeping Folia's regionized multithreading and thread-ownership rules authoritative.
+MultiFolia is a **fork of MultiPaper that has been extensively edited and converted to run on Folia 26.2**. The project keeps the original MultiPaper goal of extending Minecraft across multiple server/worker processes, while replacing the underlying execution model with **Folia 26.2** and its regionized multithreading architecture.
 
 ![MultiFolia architecture diagram](assets/multifolia-diagram.jpg)
 
 ## What MultiFolia is
 
-Folia remains the execution engine. MultiFolia does **not** replace Folia's region scheduler or bypass its thread-safety model. Instead, MultiFolia is intended to add a distributed control layer around Folia so multiple workers can coordinate ownership of regions of one world safely.
+MultiFolia started from the MultiPaper codebase, but it is **not a MultiPaper server anymore**. The codebase has been rebuilt around the Folia 26.2 tree so that Folia remains the execution engine and its region scheduler, schedulers, and thread-ownership rules remain authoritative.
 
-The core design goal is to scale a single world across multiple workers without introducing unsafe concurrent world access.
+The core design goal is to scale a single Minecraft world across multiple workers without introducing unsafe concurrent world access.
+
+## From MultiPaper to Folia 26.2
+
+The project is best understood as **MultiPaper's multi-worker concept rebuilt on top of Folia 26.2**:
+
+- **Original foundation:** MultiPaper
+- **Current execution engine:** Folia 26.2
+- **Target Minecraft version:** 26.2
+- **Concurrency model:** Folia's regionized multithreading
+- **Distributed goal:** multiple workers coordinating regions of a single world
+
+MultiPaper-specific architecture, modules, and execution assumptions have been removed where they conflict with Folia's design. MultiFolia therefore follows Folia's threading and scheduling rules instead of attempting to preserve MultiPaper's old server architecture.
 
 ## Distributed foundation
 
