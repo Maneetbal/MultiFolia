@@ -6,6 +6,10 @@ on:
       - conversion/folia-26.2
   workflow_dispatch:
 
+concurrency:
+  group: multifolia-materialize
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -40,10 +44,9 @@ jobs:
           p = Path('settings.gradle.kts')
           p.write_text(p.read_text(encoding='utf-8').replace('rootProject.name = "folia"', 'rootProject.name = "multifolia"'), encoding='utf-8')
           p = Path('gradle.properties')
-          text = p.read_text(encoding='utf-8').replace('group=dev.folia', 'group=dev.multifolia')
-          p.write_text(text, encoding='utf-8')
-          Path('README.md').write_text('''# MultiFolia\n\nMultiFolia is a Folia 26.2 fork. Folia remains the execution engine and its regionized multithreading, schedulers, and thread-ownership checks remain authoritative.\n\n## Distributed foundation\n\nThe first phase provides a safe control plane for worker registration and single-writer region leases with fencing. Cross-worker live-region writes and world-file replication are disabled until a state-transfer protocol can preserve Folia ownership semantics.\n\n## Management\n\nThe management namespace is `/multifolia` with alias `/mf`; management work must remain observational/control-plane only and must not bypass Folia scheduling or ownership checks.\n\n## Plugins\n\nPriority Folia-compatible targets: AuthMe, CombatLog, EasyHome, EzRTP, Floodgate, Geyser, GrimAC, LuckPerms, PacketEvents, PASF, PlaceholderAPI, RaycastedAntiESP, SkinsRestorer, SnowballDamage, TAB, ViaBackwards, ViaVersion. Axiom is excluded.\n''', encoding='utf-8')
-          Path('MULTIFOLIA_DISTRIBUTED_ARCHITECTURE.md').write_text('''# MultiFolia distributed architecture\n\nFolia remains authoritative for execution and thread ownership.\n\n- One worker owns a region at a time.\n- Every lease grant receives a monotonic fencing token.\n- Stale owners cannot renew or release.\n- Workers never directly write another worker's live region files.\n- Handoff requires explicit state transfer and acknowledgement before mutation by the new owner.\n\nThe current phase is only the in-process control plane. Network transport, persistent state transfer, routing, and failure recovery are intentionally not enabled yet.\n''', encoding='utf-8')
+          p.write_text(p.read_text(encoding='utf-8').replace('group=dev.folia', 'group=dev.multifolia').replace('paperRef=5563e58283f7771bd5ace9baad8b68614e37ad16', 'paperRef=5d4f9bd0e4f6b1ef70d07feb411580cef7d1a746'), encoding='utf-8')
+          Path('README.md').write_text('''# MultiFolia\n\nMultiFolia is a genuine Folia 26.2 fork. Folia remains the execution engine and its regionized multithreading, schedulers, and thread-ownership checks remain authoritative.\n\nThe distributed layer starts as a conservative control plane for worker registration, health, and single-writer region leases with fencing. Cross-worker live-region writes and world-file replication are disabled until safe state transfer exists.\n\nThe management namespace is `/multifolia` with alias `/mf`; management operations must remain observational/control-plane only.\n\nPriority Folia-compatible plugins: AuthMe, CombatLog, EasyHome, EzRTP, Floodgate, Geyser, GrimAC, LuckPerms, PacketEvents, PASF, PlaceholderAPI, RaycastedAntiESP, SkinsRestorer, SnowballDamage, TAB, ViaBackwards, ViaVersion. Axiom is excluded.\n''', encoding='utf-8')
+          Path('MULTIFOLIA_DISTRIBUTED_ARCHITECTURE.md').write_text('''# MultiFolia distributed architecture\n\nFolia remains authoritative for execution and thread ownership. Exactly one worker owns a region at a time, each lease grant gets a monotonic fencing token, and stale owners cannot renew or release. Workers never write another worker's live region files. Handoff requires explicit state transfer and acknowledgement.\n\nThe current phase is only an in-process control plane. Network transport, persistent state transfer, routing, and failure recovery remain disabled until they can be integrated without bypassing Folia ownership semantics.\n''', encoding='utf-8')
           PY
           cat > folia-server/src/test/java/dev/multifolia/distributed/MultiFoliaDistributedControlPlaneTest.java <<'EOF'
           package dev.multifolia.distributed;
@@ -60,7 +63,7 @@ jobs:
                   assertTrue(cp.tryAcquire(key, "b", Duration.ofSeconds(5)).isEmpty());
                   assertTrue(cp.release(key, "a", first.fencingToken()));
                   var second = cp.tryAcquire(key, "b", Duration.ofSeconds(5)).orElseThrow();
-                  assertNotEquals(first.fencingToken(), second.fencingToken());
+                  assertTrue(second.fencingToken() > first.fencingToken());
                   assertFalse(cp.release(key, "a", first.fencingToken()));
               }
           }
