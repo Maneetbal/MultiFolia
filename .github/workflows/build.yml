@@ -38,10 +38,40 @@ jobs:
       - name: Build MultiFolia
         run: timeout 10m gradle --no-daemon build --stacktrace
 
-      - name: Upload MultiFolia artifacts
+      - name: Package MultiFolia distribution
+        run: |
+          rm -rf dist
+          mkdir -p dist/multifolia-node dist/multifolia-server
+
+          # Node package: API runtime JAR. There is not yet a standalone
+          # executable distributed-node process in the current implementation.
+          cp folia-api/build/libs/folia-api-*.jar dist/multifolia-node/
+          cp distribution/multifolia-node/README.md dist/multifolia-node/README.md
+
+          # Server package: every server JAR produced by the build.
+          cp folia-server/build/libs/*.jar dist/multifolia-server/
+          cp distribution/multifolia-server/README.md dist/multifolia-server/README.md
+
+          printf '%s\n' \
+            'MultiFolia 26.2 distribution' \
+            '' \
+            'multifolia-server/: runnable MultiFolia/Folia 26.2 server JARs' \
+            'multifolia-node/: current node-side API package; standalone distributed node runtime is not implemented yet' \
+            '' \
+            'Use JDK 25. See the README.md inside each directory for exact usage.' \
+            > dist/README.txt
+
+      - name: Verify packaged distribution
+        run: |
+          test -f dist/multifolia-node/README.md
+          test -f dist/multifolia-server/README.md
+          test -n "$(find dist/multifolia-node -maxdepth 1 -name '*.jar' -print -quit)"
+          test -n "$(find dist/multifolia-server -maxdepth 1 -name '*.jar' -print -quit)"
+          find dist -maxdepth 2 -type f -printf '%p %s bytes\n' | sort
+
+      - name: Upload MultiFolia distribution
         uses: actions/upload-artifact@v7
         with:
           name: multifolia
-          path: |
-            folia-server/build/libs/*.jar
-            folia-api/build/libs/*.jar
+          path: dist/
+          if-no-files-found: error
