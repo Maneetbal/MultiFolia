@@ -1,12 +1,28 @@
 # MultiFolia Node
 
-This directory is the **node-side package** produced by the MultiFolia build.
+This directory contains the **runnable MultiFolia 26.2 node package** produced by the build.
 
-## Current contents
+## Requirements
 
-The package contains the Folia API JAR used by plugins and node-side Java development.
+- Minecraft 26.2
+- **JDK 25**
+- A clean, dedicated server directory for each node
 
-**Important:** the current MultiFolia build does **not yet contain a standalone executable distributed-node process**. Do not launch the API JAR with `java -jar`; it is a library, not a Minecraft server.
+## Launch
+
+The node package contains the same runnable Paperclip server runtime used by the MultiFolia server distribution. Start it from a terminal with:
+
+```text
+java -Xms4G -Xmx8G -jar multifolia-node.jar --nogui
+```
+
+On first launch, accept the Minecraft EULA by setting `eula=true` in `eula.txt`, then start the command again.
+
+## Node deployment
+
+Each node must use its **own server directory and world storage**. Do not point multiple running nodes at the same live world files.
+
+The current distributed control plane provides worker registration and lease/fencing primitives, but cross-node world state transfer, routing, and live region handoff are not yet enabled. A runnable node does not imply that one world can safely be shared between independent server processes yet.
 
 ## Java version
 
@@ -19,16 +35,3 @@ java -version
 ```
 
 The runtime should report Java 25.
-
-## Laptop setup
-
-For the current build, this folder is not enough to turn a laptop into a live worker for the same world as the main server. Safe multi-worker region ownership, state transfer, fencing, and handoff are still being implemented.
-
-For now:
-
-1. Install JDK 25.
-2. Keep this directory available if you are developing against the MultiFolia API.
-3. Run the actual Minecraft server from `multifolia-server`.
-4. Never point two machines at the same live world files.
-
-A future release will add an executable node runtime here once the distributed worker layer is implemented and validated.
