@@ -1,6 +1,6 @@
 # MultiFolia Server
 
-This directory contains the **runnable MultiFolia 26.2 server JAR**.
+This directory contains the **runnable MultiFolia 26.2 Paperclip server JAR**.
 
 ## Requirements
 
@@ -8,11 +8,13 @@ This directory contains the **runnable MultiFolia 26.2 server JAR**.
 - **JDK 25**
 - A clean, dedicated server directory
 
+The distributed artifact is the Paperclip JAR produced by `createPaperclipJar`. The ordinary `folia-server` JAR produced by the Gradle `jar` task is a classes-only build artifact and is not the file users should launch directly.
+
 Do not run the server by double-clicking the JAR. Start it from a terminal so you can see any errors.
 
 ## Windows setup
 
-1. Copy `folia-server-*.jar` from this directory into a new server folder, for example:
+1. Copy `multifolia-server-26.2.local-SNAPSHOT.jar` from this directory into a new server folder, for example:
 
 ```text
 C:\MultiFoliaServer\
@@ -29,7 +31,7 @@ java -version
 4. Start MultiFolia:
 
 ```text
-java -Xms4G -Xmx8G -jar folia-server-*.jar --nogui
+java -Xms4G -Xmx8G -jar multifolia-server-26.2.local-SNAPSHOT.jar --nogui
 ```
 
 Adjust the memory values for your machine.
@@ -52,6 +54,6 @@ MultiFolia 26.2 is compiled for Java 25. A newer JDK may be able to run the byte
 
 ## Important: distributed node support
 
-The current server JAR is a Folia-based Minecraft server. The separate distributed worker/node runtime is **not finished yet**.
+The current server is a Folia-based Minecraft server. The separate distributed worker/node runtime is **not finished yet**.
 
-Do not run two copies against the same `world` directory. MultiFolia must implement safe region ownership, leases/fencing, state transfer, and handoff before one world can safely span the server PC and laptop.
+Do not run two copies against the same `world` directory. MultiFolia must implement safe region ownership, leases/fencing, state transfer, and handoff before one world can safely span multiple workers.
