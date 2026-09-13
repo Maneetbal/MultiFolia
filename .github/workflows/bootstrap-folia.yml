@@ -33,10 +33,8 @@ jobs:
           git clone --depth 1 --branch ver/26.2.x https://github.com/PaperMC/Folia.git /tmp/folia
           rsync -a --delete --exclude='.git' /tmp/folia/ ./
           rm -rf /tmp/folia
-          mkdir -p folia-server/src/main/java/dev/multifolia/distributed
-          mkdir -p folia-server/src/test/java/dev/multifolia/distributed
+          mkdir -p folia-server/src/main/java/dev/multifolia/distributed folia-server/src/test/java/dev/multifolia/distributed
           git show origin/main:.github/multifolia/distributed-control-plane.java > folia-server/src/main/java/dev/multifolia/distributed/MultiFoliaDistributedControlPlane.java
-          git show origin/main:.github/multifolia/management-command.patch > folia-server/paper-patches/features/0007-MultiFolia-management-command.patch
           python3 - <<'PY'
           from pathlib import Path
           p = Path('settings.gradle.kts')
@@ -44,7 +42,7 @@ jobs:
           p = Path('gradle.properties')
           text = p.read_text(encoding='utf-8').replace('group=dev.folia', 'group=dev.multifolia')
           p.write_text(text, encoding='utf-8')
-          Path('README.md').write_text('''# MultiFolia\n\nMultiFolia is a Folia 26.2 fork. Folia remains the execution engine and its regionized multithreading, schedulers, and thread-ownership checks remain authoritative.\n\n## Distributed foundation\n\nThe first phase provides a safe control plane for worker registration and single-writer region leases with fencing. Cross-worker live-region writes and world-file replication are disabled until a state-transfer protocol can preserve Folia ownership semantics.\n\n## Management\n\n`/multifolia` and `/mf` expose `servers`, `list`, `debug`, and `map` as observational management commands.\n\n## Plugins\n\nPriority Folia-compatible targets: AuthMe, CombatLog, EasyHome, EzRTP, Floodgate, Geyser, GrimAC, LuckPerms, PacketEvents, PASF, PlaceholderAPI, RaycastedAntiESP, SkinsRestorer, SnowballDamage, TAB, ViaBackwards, ViaVersion. Axiom is excluded.\n''', encoding='utf-8')
+          Path('README.md').write_text('''# MultiFolia\n\nMultiFolia is a Folia 26.2 fork. Folia remains the execution engine and its regionized multithreading, schedulers, and thread-ownership checks remain authoritative.\n\n## Distributed foundation\n\nThe first phase provides a safe control plane for worker registration and single-writer region leases with fencing. Cross-worker live-region writes and world-file replication are disabled until a state-transfer protocol can preserve Folia ownership semantics.\n\n## Management\n\nThe management namespace is `/multifolia` with alias `/mf`; management work must remain observational/control-plane only and must not bypass Folia scheduling or ownership checks.\n\n## Plugins\n\nPriority Folia-compatible targets: AuthMe, CombatLog, EasyHome, EzRTP, Floodgate, Geyser, GrimAC, LuckPerms, PacketEvents, PASF, PlaceholderAPI, RaycastedAntiESP, SkinsRestorer, SnowballDamage, TAB, ViaBackwards, ViaVersion. Axiom is excluded.\n''', encoding='utf-8')
           Path('MULTIFOLIA_DISTRIBUTED_ARCHITECTURE.md').write_text('''# MultiFolia distributed architecture\n\nFolia remains authoritative for execution and thread ownership.\n\n- One worker owns a region at a time.\n- Every lease grant receives a monotonic fencing token.\n- Stale owners cannot renew or release.\n- Workers never directly write another worker's live region files.\n- Handoff requires explicit state transfer and acknowledgement before mutation by the new owner.\n\nThe current phase is only the in-process control plane. Network transport, persistent state transfer, routing, and failure recovery are intentionally not enabled yet.\n''', encoding='utf-8')
           PY
           cat > folia-server/src/test/java/dev/multifolia/distributed/MultiFoliaDistributedControlPlaneTest.java <<'EOF'
