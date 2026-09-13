@@ -93,7 +93,7 @@ jobs:
 
           find dist -maxdepth 2 -type f -printf '%p %s bytes\n' | sort
 
-      - name: Smoke test packaged server
+      - name: Smoke test packaged server and management commands
         run: |
           set -euo pipefail
           rm -rf smoke-test
@@ -104,11 +104,17 @@ jobs:
 
           cd smoke-test
           set +e
-          timeout 60s java -Xms512M -Xmx1G -jar server.jar --nogui > server.log 2>&1
+          printf '%s\n' \
+            'multifolia' \
+            'multifolia servers' \
+            'mf list' \
+            'mf debug' \
+            'multifolia map' \
+            'stop' \
+            | timeout 60s java -Xms512M -Xmx1G -jar server.jar --nogui > server.log 2>&1
           status=$?
           set -e
 
-          # timeout(124) is expected if the server remains running after startup.
           if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
             cat server.log
             exit "$status"
@@ -116,7 +122,13 @@ jobs:
 
           cat server.log
           grep -Eq 'Done \([0-9.]+s\)! For help, type "help"' server.log
-          echo 'Packaged server passed runtime startup smoke test.'
+          grep -Eq 'MultiFolia management' server.log
+          grep -Eq 'MultiFolia workers \(1\)' server.log
+          grep -Eq 'local-server' server.log
+          grep -Eq 'MultiFolia distributed state' server.log
+          grep -Eq 'Distributed transport: .*NOT IMPLEMENTED' server.log
+          grep -Eq 'MultiFolia region map' server.log
+          echo 'Packaged server and MultiFolia management commands passed runtime smoke test.'
 
       - name: Upload MultiFolia distribution
         uses: actions/upload-artifact@v7
