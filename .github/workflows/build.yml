@@ -5,9 +5,13 @@ on:
   pull_request:
   push:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout Git Repository
         uses: actions/checkout@v6
@@ -16,19 +20,16 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 25
+          java-version: '25'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Configure Git User Details
-        run: git config --global user.email "no-reply@github.com" && git config --global user.name "Github Actions"
-
       - name: Apply Folia Patches
-        run: ./gradlew applyAllPatches --stacktrace
+        run: timeout 10m ./gradlew --no-daemon applyAllPatches --stacktrace
 
       - name: Build MultiFolia
-        run: ./gradlew build --stacktrace
+        run: timeout 10m ./gradlew --no-daemon build --stacktrace
 
       - name: Upload MultiFolia artifacts
         uses: actions/upload-artifact@v7
