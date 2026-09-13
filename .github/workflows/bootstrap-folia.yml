@@ -13,7 +13,7 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: conversion/folia-26.2
           fetch-depth: 0
@@ -31,9 +31,36 @@ jobs:
           git clone --depth 1 --branch ver/26.2.x https://github.com/PaperMC/Folia.git /tmp/folia
           rsync -a --delete --exclude='.git' /tmp/folia/ ./
           rm -rf /tmp/folia
-      - name: Run MultiFolia materializer
+      - name: Materialize MultiFolia source layer
         run: |
           set -euo pipefail
-          git show origin/main:.github/multifolia/materialize.sh > /tmp/materialize.sh
-          chmod +x /tmp/materialize.sh
-          /tmp/materialize.sh
+          git show origin/main:.github/multifolia/materialize-source.sh > /tmp/materialize-source.sh
+          chmod +x /tmp/materialize-source.sh
+          /tmp/materialize-source.sh
+      - name: Apply Folia patches
+        run: ./gradlew applyAllPatches --stacktrace
+      - name: Build Folia 26.2
+        run: ./gradlew build --stacktrace
+      - name: Verify clean MultiFolia tree
+        run: |
+          set -euo pipefail
+          if grep -RniE 'multipaper|MultiPaper|MULTIPAPER' . --exclude-dir=.git --exclude-dir=.gradle --exclude-dir=build; then
+            echo 'Forbidden MultiPaper reference remains'
+            exit 1
+          fi
+          test -d folia-api
+          test -d folia-server
+          test -d folia-checkstyle
+          test -d build-data
+          test ! -d multipaper-api
+          test ! -d multipaper-server
+          test ! -d multipaper-master
+          test ! -d multipaper-mastermessagingprotocol
+          grep -q '^mcVersion=26.2$' gradle.properties
+          grep -q '^apiVersion=26.2$' gradle.properties
+          grep -q '^paperRef=5d4f9bd0e4f6b1ef70d07feb411580cef7d1a746$' gradle.properties
+      - name: Commit verified materialization
+        run: |
+          git add -A
+          git commit -m 'Materialize official Folia 26.2 tree' || true
+          git push origin HEAD:conversion/folia-26.2
