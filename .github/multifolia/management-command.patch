@@ -51,15 +51,15 @@ new file mode 100644
 +    }
 +}
 +
-+diff --git a/src/main/java/io/papermc/paper/command/PaperCommands.java b/src/main/java/io/papermc/paper/command/PaperCommands.java
-+--- a/src/main/java/io/papermc/paper/command/PaperCommands.java
-++++ b/src/main/java/io/papermc/paper/command/PaperCommands.java
-+@@ -19,6 +19,8 @@ public final class PaperCommands {
-+ 
-+     public static void registerCommands(final MinecraftServer server) {
-+         COMMANDS.put("paper", new PaperCommand("paper"));
-++        COMMANDS.put("multifolia", new MultiFoliaCommand("multifolia", server));
-++        COMMANDS.put("mf", new MultiFoliaCommand("mf", server));
-+ 
-+         COMMANDS.forEach((s, command) -> {
-+             server.server.getCommandMap().register(s, "Paper", command);
+diff --git a/src/main/java/io/papermc/paper/command/PaperCommands.java b/src/main/java/io/papermc/paper/command/PaperCommands.java
+--- a/src/main/java/io/papermc/paper/command/PaperCommands.java
++++ b/src/main/java/io/papermc/paper/command/PaperCommands.java
+@@ -19,6 +19,8 @@ public final class PaperCommands {
+ 
+     public static void registerCommands(final MinecraftServer server) {
+         COMMANDS.put("paper", new PaperCommand("paper"));
++        COMMANDS.put("multifolia", new MultiFoliaCommand("multifolia", server));
++        COMMANDS.put("mf", new MultiFoliaCommand("mf", server));
+ 
+         COMMANDS.forEach((s, command) -> {
+             server.server.getCommandMap().register(s, "Paper", command);
