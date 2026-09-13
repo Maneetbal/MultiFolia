@@ -7,14 +7,12 @@ Register the native MultiFolia management command and its /mf alias. The
 command is intentionally observational: it reports the local control-plane
 state and does not bypass Folia's region scheduler or ownership checks.
 
-
 diff --git a/src/main/java/io/papermc/paper/command/PaperCommands.java b/src/main/java/io/papermc/paper/command/PaperCommands.java
 --- a/src/main/java/io/papermc/paper/command/PaperCommands.java
 +++ b/src/main/java/io/papermc/paper/command/PaperCommands.java
-@@ -23,6 +23,7 @@ public final class PaperCommands {
+@@ -23,4 +23,5 @@ public final class PaperCommands {
      public static void registerCommands(final MinecraftServer server) {
          COMMANDS.put("paper", new PaperCommand("paper"));
 +        COMMANDS.put("multifolia", new dev.multifolia.MultiFoliaCommand()); // MultiFolia - management command
          COMMANDS.put("tps", new io.papermc.paper.threadedregions.commands.CommandServerHealth()); // Folia - region threading
          COMMANDS.forEach((s, command) -> {
-             server.server.getCommandMap().register(s, "Paper", command);
