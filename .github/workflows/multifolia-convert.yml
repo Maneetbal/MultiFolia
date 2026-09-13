@@ -22,6 +22,10 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Configure Git identity
+        run: |
+          git config --global user.email 'no-reply@github.com'
+          git config --global user.name 'MultiFolia Automation'
       - name: Import official Folia ver/26.2.x
         shell: bash
         run: |
@@ -37,7 +41,7 @@ jobs:
           p = Path('gradle.properties')
           p.write_text(p.read_text(encoding='utf-8').replace('group=dev.folia', 'group=dev.multifolia'), encoding='utf-8')
           Path('README.md').write_text('''# MultiFolia\n\nFolia 26.2 fork with a conservative distributed control-plane foundation. Folia remains the server engine and its regionized multithreading, schedulers, and thread-ownership checks remain authoritative.\n\nThe first distributed phase provides worker registration/health and single-writer region leases with fencing tokens. Cross-worker world writes and live region-file replication are deliberately disabled until safe state transfer is implemented.\n\n### Management commands\n`/multifolia` and `/mf` expose `servers`, `list`, `debug`, and `map` without bypassing Folia scheduling or ownership rules.\n\n### Build\n`./gradlew applyAllPatches`\n`./gradlew build`\n\n### Plugin policy\nOnly Folia-compatible plugins are expected to be safe. Priority targets: AuthMe, CombatLog, EasyHome, EzRTP, Floodgate, Geyser, GrimAC, LuckPerms, PacketEvents, PASF, PlaceholderAPI, RaycastedAntiESP, SkinsRestorer, SnowballDamage, TAB, ViaBackwards, ViaVersion. Axiom is excluded.\n''', encoding='utf-8')
-          Path('MULTIFOLIA_DISTRIBUTED_ARCHITECTURE.md').write_text('''# MultiFolia distributed architecture\n\nThe distributed layer is additive to Folia and never replaces its scheduler.\n\n## Invariants\n- One active owner per region.\n- Monotonic fencing tokens on each ownership grant.\n- Stale owners cannot renew or release.\n- Region work remains under Folia ownership rules.\n- Workers never concurrently write each other's live region files.\n- Handoff requires state transfer and acknowledgement before mutation.\n\nThe current phase is only the local control plane; network transport, persistent state transfer, failure recovery, and routing remain disabled until they can be made ownership-safe.\n''', encoding='utf-8')
+          Path('MULTIFOLIA_DISTRIBUTED_ARCHITECTURE.md').write_text('''# MultiFolia distributed architecture\n\nThe distributed layer is additive to Folia and never replaces the scheduler.\n\n## Invariants\n- One active owner per region.\n- Monotonic fencing tokens on each ownership grant.\n- Stale owners cannot renew or release.\n- Region work remains under Folia ownership rules.\n- Workers never concurrently write each other's live region files.\n- Handoff requires state transfer and acknowledgement before mutation.\n\nThe current phase is only the local control plane; network transport, persistent state transfer, failure recovery, and routing remain disabled until they can be made ownership-safe.\n''', encoding='utf-8')
           PY
 
           rm -rf multipaper-api multipaper-server multipaper-master multipaper-mastermessagingprotocol
@@ -47,7 +51,6 @@ jobs:
           mkdir -p folia-server/src/main/java/dev/multifolia/distributed folia-server/src/test/java/dev/multifolia/distributed
           cat > folia-server/src/main/java/dev/multifolia/distributed/MultiFoliaDistributedControlPlane.java <<'EOF'
           package dev.multifolia.distributed;
-
           import java.time.Duration;
           import java.time.Instant;
           import java.util.List;
@@ -56,7 +59,6 @@ jobs:
           import java.util.Optional;
           import java.util.concurrent.ConcurrentHashMap;
           import java.util.concurrent.atomic.AtomicLong;
-
           public final class MultiFoliaDistributedControlPlane {
               public enum WorkerState { REGISTERED, HEALTHY, DRAINING, UNHEALTHY, OFFLINE }
               public record Worker(String id, WorkerState state, Instant lastHeartbeat, String endpoint) {
@@ -68,42 +70,13 @@ jobs:
               private final Map<String, Worker> workers = new ConcurrentHashMap<>();
               private final Map<RegionKey, Lease> leases = new ConcurrentHashMap<>();
               private final AtomicLong fencing = new AtomicLong();
-              public Worker registerWorker(String id, String endpoint) {
-                  Instant now = Instant.now();
-                  return workers.compute(id, (k, old) -> old == null ? new Worker(id, WorkerState.REGISTERED, now, endpoint) : old.heartbeat(now));
-              }
-              public Worker heartbeat(String id) {
-                  Worker worker = workers.computeIfPresent(id, (k, old) -> old.heartbeat(Instant.now()));
-                  if (worker == null) throw new IllegalArgumentException("Unknown worker: " + id);
-                  return worker;
-              }
+              public Worker registerWorker(String id, String endpoint) { Instant now = Instant.now(); return workers.compute(id, (k, old) -> old == null ? new Worker(id, WorkerState.REGISTERED, now, endpoint) : old.heartbeat(now)); }
+              public Worker heartbeat(String id) { Worker worker = workers.computeIfPresent(id, (k, old) -> old.heartbeat(Instant.now())); if (worker == null) throw new IllegalArgumentException("Unknown worker: " + id); return worker; }
               public List<Worker> workers() { return workers.values().stream().sorted((a,b) -> a.id().compareTo(b.id())).toList(); }
-              public Optional<Lease> current(RegionKey key) {
-                  Lease lease = leases.get(key); if (lease == null) return Optional.empty();
-                  if (lease.expired(System.nanoTime())) { leases.remove(key, lease); return Optional.empty(); }
-                  return Optional.of(lease);
-              }
-              public Optional<Lease> tryAcquire(RegionKey key, String workerId, Duration ttl) {
-                  if (ttl.isZero() || ttl.isNegative()) throw new IllegalArgumentException("ttl must be positive");
-                  long now = System.nanoTime(), expiry = Math.addExact(now, ttl.toNanos()); Lease[] acquired = new Lease[1];
-                  leases.compute(key, (k, old) -> {
-                      if (old != null && !old.expired(now) && !old.workerId().equals(workerId)) return old;
-                      Lease lease = new Lease(workerId, fencing.incrementAndGet(), expiry); acquired[0] = lease; return lease;
-                  });
-                  return Optional.ofNullable(acquired[0]);
-              }
-              public boolean renew(RegionKey key, String workerId, long token, Duration ttl) {
-                  if (ttl.isZero() || ttl.isNegative()) throw new IllegalArgumentException("ttl must be positive");
-                  long expiry = Math.addExact(System.nanoTime(), ttl.toNanos()); boolean[] ok = new boolean[1];
-                  leases.computeIfPresent(key, (k, old) -> {
-                      if (old.workerId().equals(workerId) && old.fencingToken() == token && !old.expired(System.nanoTime())) { ok[0] = true; return new Lease(workerId, token, expiry); }
-                      return old;
-                  });
-                  return ok[0];
-              }
-              public boolean release(RegionKey key, String workerId, long token) {
-                  Lease old = leases.get(key); return old != null && old.workerId().equals(workerId) && old.fencingToken() == token && leases.remove(key, old);
-              }
+              public Optional<Lease> current(RegionKey key) { Lease lease = leases.get(key); if (lease == null) return Optional.empty(); if (lease.expired(System.nanoTime())) { leases.remove(key, lease); return Optional.empty(); } return Optional.of(lease); }
+              public Optional<Lease> tryAcquire(RegionKey key, String workerId, Duration ttl) { if (ttl.isZero() || ttl.isNegative()) throw new IllegalArgumentException("ttl must be positive"); if (!workers.containsKey(workerId)) throw new IllegalArgumentException("Unknown worker: " + workerId); long now = System.nanoTime(), expiry = Math.addExact(now, ttl.toNanos()); Lease[] acquired = new Lease[1]; leases.compute(key, (k, old) -> { if (old != null && !old.expired(now) && !old.workerId().equals(workerId)) return old; Lease lease = new Lease(workerId, fencing.incrementAndGet(), expiry); acquired[0] = lease; return lease; }); return Optional.ofNullable(acquired[0]); }
+              public boolean renew(RegionKey key, String workerId, long token, Duration ttl) { if (ttl.isZero() || ttl.isNegative()) throw new IllegalArgumentException("ttl must be positive"); long expiry = Math.addExact(System.nanoTime(), ttl.toNanos()); boolean[] ok = new boolean[1]; leases.computeIfPresent(key, (k, old) -> { if (old.workerId().equals(workerId) && old.fencingToken() == token && !old.expired(System.nanoTime())) { ok[0] = true; return new Lease(workerId, token, expiry); } return old; }); return ok[0]; }
+              public boolean release(RegionKey key, String workerId, long token) { Lease old = leases.get(key); return old != null && old.workerId().equals(workerId) && old.fencingToken() == token && leases.remove(key, old); }
           }
           EOF
 
@@ -115,6 +88,8 @@ jobs:
           class MultiFoliaDistributedControlPlaneTest {
               @Test void ownershipIsSingleWriterAndFenced() {
                   var cp = new MultiFoliaDistributedControlPlane();
+                  cp.registerWorker("a", "local-a");
+                  cp.registerWorker("b", "local-b");
                   var key = new MultiFoliaDistributedControlPlane.RegionKey("minecraft:overworld", 1, 2);
                   var first = cp.tryAcquire(key, "a", Duration.ofSeconds(5)).orElseThrow();
                   assertTrue(cp.tryAcquire(key, "b", Duration.ofSeconds(5)).isEmpty());
@@ -124,75 +99,6 @@ jobs:
                   assertFalse(cp.release(key, "a", first.fencingToken()));
               }
           }
-          EOF
-
-          cat > folia-server/paper-patches/features/0007-MultiFolia-management-command.patch <<'EOF'
-          From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-          From: MultiFolia <multifolia@users.noreply.github.com>
-          Date: Sat, 13 Sep 2026 00:00:00 +0000
-          Subject: [PATCH] Add MultiFolia management command
-
-          diff --git a/src/main/java/io/papermc/paper/command/MultiFoliaCommand.java b/src/main/java/io/papermc/paper/command/MultiFoliaCommand.java
-          new file mode 100644
-          --- /dev/null
-          +++ b/src/main/java/io/papermc/paper/command/MultiFoliaCommand.java
-          @@ -0,0 +1,61 @@
-          +package io.papermc.paper.command;
-          +
-          +import net.minecraft.server.MinecraftServer;
-          +import org.bukkit.Bukkit;
-          +import org.bukkit.command.Command;
-          +import org.bukkit.command.CommandSender;
-          +import java.util.ArrayList;
-          +import java.util.Arrays;
-          +import java.util.List;
-          +
-          +public final class MultiFoliaCommand extends Command {
-          +    private static final List<String> SUBCOMMANDS = List.of("servers", "list", "debug", "map");
-          +    private final MinecraftServer server;
-          +
-          +    public MultiFoliaCommand(final String name, final MinecraftServer server) {
-          +        super(name, "MultiFolia management", "/" + name + " <servers|list|debug|map>", SUBCOMMANDS);
-          +        this.server = server;
-          +        this.setPermission("multifolia.admin");
-          +    }
-          +
-          +    @Override
-          +    public boolean execute(final CommandSender sender, final String label, final String[] args) {
-          +        if (!this.testPermission(sender)) return true;
-          +        if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
-          +            sender.sendMessage("/" + label + " servers|list|debug|map");
-          +            return true;
-          +        }
-          +        switch (args[0].toLowerCase(java.util.Locale.ROOT)) {
-          +            case "servers" -> sender.sendMessage("MultiFolia worker: " + server.server.getName() + " (local control plane)");
-          +            case "list" -> sender.sendMessage("Players online: " + Bukkit.getOnlinePlayers().size());
-          +            case "debug" -> sender.sendMessage("MultiFolia region debug is observational only; Folia ownership is unchanged.");
-          +            case "map" -> sender.sendMessage("MultiFolia region map is available to the control plane; live cross-worker mutation is disabled.");
-          +            default -> sender.sendMessage("Unknown subcommand. Use /" + label + " servers|list|debug|map");
-          +        }
-          +        return true;
-          +    }
-          +
-          +    @Override
-          +    public List<String> tabComplete(final CommandSender sender, final String alias, final String[] args) {
-          +        if (args.length > 1) return List.of();
-          +        String prefix = args.length == 0 ? "" : args[0].toLowerCase(java.util.Locale.ROOT);
-          +        return SUBCOMMANDS.stream().filter(s -> s.startsWith(prefix)).toList();
-          +    }
-          +}
-          diff --git a/src/main/java/io/papermc/paper/command/PaperCommands.java b/src/main/java/io/papermc/paper/command/PaperCommands.java
-          --- a/src/main/java/io/papermc/paper/command/PaperCommands.java
-          +++ b/src/main/java/io/papermc/paper/command/PaperCommands.java
-          @@ -19,6 +19,8 @@ public final class PaperCommands {
-           
-               public static void registerCommands(final MinecraftServer server) {
-                   COMMANDS.put("paper", new PaperCommand("paper"));
-          +        COMMANDS.put("multifolia", new MultiFoliaCommand("multifolia", server));
-          +        COMMANDS.put("mf", new MultiFoliaCommand("mf", server));
-          
-                   COMMANDS.forEach((s, command) -> {
-                       server.server.getCommandMap().register(s, "Paper", command);
           EOF
 
           test -d folia-api
@@ -236,8 +142,8 @@ jobs:
                       folia-api/build/libs/*.jar
           EOF
 
-          git config user.email 'no-reply@github.com'
-          git config user.name 'Github Actions'
+          git config --global user.email 'no-reply@github.com'
+          git config --global user.name 'MultiFolia Automation'
           git add -A
           git commit -m 'Replace MultiPaper foundation with Folia 26.2' || true
           git push origin HEAD:conversion/folia-26.2
