@@ -1,5 +1,17 @@
 # MultiPaper
 
+---
+
+> [!CAUTION]
+>
+> **This fork is only for fun and testing**
+>
+> **It is guaranteed to be unstable and break things**
+>
+> **Please don't use it on production server or important world**
+
+---
+
 [![Discord](https://img.shields.io/discord/937309618743427113.svg?color=738ad6&label=Join%20the%20Discord%20server&logo=discord&logoColor=ffffff)](https://discord.gg/dN3WCZkSRV)
 
 **MultiPaper is in public beta.** Most features work for most players most of

@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Thu, 9 Oct 2025 23:20:13 +0800
+Subject: [PATCH] Rebrand to MultiPaper
+
+
+diff --git a/src/main/java/co/aikar/timings/TimingsManager.java b/src/main/java/co/aikar/timings/TimingsManager.java
+index 83a70358e9b7d3d9ae76cf130915b3c33d09a793..090744780cf0457404955de74cb73ca70e8097b5 100644
+--- a/src/main/java/co/aikar/timings/TimingsManager.java
++++ b/src/main/java/co/aikar/timings/TimingsManager.java
+@@ -155,7 +155,7 @@ public final class TimingsManager {
+         final Server server = Bukkit.getServer();
+         if (!(server == null || pluginName == null ||
+             "minecraft".equals(pluginName) || "bukkit".equals(pluginName) ||
+-            "spigot".equalsIgnoreCase(pluginName) || "paper".equals(pluginName)
++            "spigot".equalsIgnoreCase(pluginName) || "paper".equals(pluginName) || "multipaper".equals(pluginName) // MultiPaper - Rebrand to MultiPaper - skip command plugin check
+         )) {
+             plugin = server.getPluginManager().getPlugin(pluginName);
+         }
+diff --git a/src/main/java/io/papermc/paper/ServerBuildInfo.java b/src/main/java/io/papermc/paper/ServerBuildInfo.java
+index fb1fe2651e53a9bf46b3632c638e13eea9dcda93..f0eebab1376b3b2f3e0e3a953e4ef3284690b22f 100644
+--- a/src/main/java/io/papermc/paper/ServerBuildInfo.java
++++ b/src/main/java/io/papermc/paper/ServerBuildInfo.java
+@@ -25,6 +25,14 @@ public interface ServerBuildInfo {
+      */
+     Key BRAND_PURPUR_ID = Key.key("purpurmc", "purpur");
+     // Purpur end
++
++    // MultiPaper start - Rebrand to MultiPaper
++    /**
++     * The brand id for MultiPaper.
++     */
++    Key BRAND_MULTIPAPER_ID = Key.key("multipaper", "multipaper");
++    // MultiPaper end - Rebrand to MultiPaper
++
+     /**
+      * Gets the {@code ServerBuildInfo}.
+      *

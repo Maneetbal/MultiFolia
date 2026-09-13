@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Thu, 9 Oct 2025 23:29:38 +0800
+Subject: [PATCH] Sync permission
+
+
+diff --git a/src/main/java/org/bukkit/permissions/PermissibleBase.java b/src/main/java/org/bukkit/permissions/PermissibleBase.java
+index 1aa3c6dbf2f2a62fbec990f931d5c5d5c8e5a0bd..226378f73df8934addbfa300e4c9990d454052a4 100644
+--- a/src/main/java/org/bukkit/permissions/PermissibleBase.java
++++ b/src/main/java/org/bukkit/permissions/PermissibleBase.java
+@@ -21,6 +21,7 @@ public class PermissibleBase implements Permissible {
+     private final Permissible parent;
+     private final List<PermissionAttachment> attachments = new LinkedList<PermissionAttachment>();
+     private final Map<String, PermissionAttachmentInfo> permissions = new HashMap<String, PermissionAttachmentInfo>();
++    public boolean dirty = false; // MultiPaper - Sync permission
+ 
+     public PermissibleBase(@Nullable ServerOperator opable) {
+         this.opable = opable;
+@@ -177,6 +178,7 @@ public class PermissibleBase implements Permissible {
+         for (PermissionAttachment attachment : attachments) {
+             calculateChildPermissions(attachment.getPermissions(), false, attachment);
+         }
++        this.dirty = true; // MultiPaper - Sync permission
+     }
+ 
+     public synchronized void clearPermissions() {

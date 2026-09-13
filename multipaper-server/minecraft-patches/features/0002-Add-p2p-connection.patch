@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Thu, 2 Oct 2025 16:53:42 +0800
+Subject: [PATCH] Add p2p connection
+
+
+diff --git a/net/minecraft/server/dedicated/DedicatedServer.java b/net/minecraft/server/dedicated/DedicatedServer.java
+index e2c50c8b3088a4fe8f73531106f58fc9de0bea67..9266a135df3c6aa161e3b49f8a2caa65418641e4 100644
+--- a/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -337,6 +337,8 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+         }
+         // Purpur end - UPnP Port Forwarding
+ 
++        puregero.multipaper.MultiPaper.onStart(bindAddress); // MultiPaper - Add p2p connection
++
+         // CraftBukkit start
+         this.server.loadPlugins();
+         this.server.enablePlugins(org.bukkit.plugin.PluginLoadOrder.STARTUP);
+diff --git a/net/minecraft/server/network/ServerConnectionListener.java b/net/minecraft/server/network/ServerConnectionListener.java
+index e84e243f35b09691d03e9a9cf3de0c093b1d5cfb..64770706691bf897a4317c971daa45dc123d2150 100644
+--- a/net/minecraft/server/network/ServerConnectionListener.java
++++ b/net/minecraft/server/network/ServerConnectionListener.java
+@@ -54,7 +54,7 @@ public class ServerConnectionListener {
+     }
+ 
+     // Paper start - prevent blocking on adding a new connection while the server is ticking
+-    private final java.util.Queue<Connection> pending = new java.util.concurrent.ConcurrentLinkedQueue<>();
++    public final java.util.Queue<Connection> pending = new java.util.concurrent.ConcurrentLinkedQueue<>(); // MultiPaper - Add p2p connection - make public
+     private static final boolean disableFlushConsolidation = Boolean.getBoolean("Paper.disableFlushConsolidate"); // Paper - Optimize network
+ 
+     private final void addPending() {
+diff --git a/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java b/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+index 2d4272b9ee3f9d034fe0585374f0962c67f03294..e4424e464f4ca6f5db072d7139575a9c905dcaa4 100644
+--- a/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+@@ -35,6 +35,17 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
+ 
+     @Override
+     public void handleIntention(final ClientIntentionPacket packet) {
++        // MultiPaper start - Add p2p connection
++        // check if this is a MultiPaper peer connection
++        for (String part : packet.hostName().split("\00")) {
++            if (part.equals(puregero.multipaper.MultiPaper.getConnection().secret)) {
++                this.server.getConnection().pending.remove(this.connection);
++                this.server.getConnection().getConnections().remove(this.connection);
++                new puregero.multipaper.ExternalServerConnection(this.connection.channel);
++                return;
++            }
++        }
++        // MultiPaper end - Add p2p connection
+         this.connection.hostname = packet.hostName() + ":" + packet.port(); // CraftBukkit  - set hostname
+         switch (packet.intention()) {
+             case LOGIN:

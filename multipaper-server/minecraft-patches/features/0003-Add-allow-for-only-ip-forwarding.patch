@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Tue, 3 Mar 2026 03:06:08 +0800
+Subject: [PATCH] Add allow for only ip forwarding
+
+
+diff --git a/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java b/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+index e4424e464f4ca6f5db072d7139575a9c905dcaa4..14fd148dfd6c848441c18e050a7792db49551468 100644
+--- a/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+@@ -164,13 +164,13 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
+             String[] split = packet.hostName().split("\00");
+             if (!handledByEvent && proxyLogicEnabled) { // Paper
+                 // if (org.spigotmc.SpigotConfig.bungee) { // Paper - comment out, we check above!
+-                if ((split.length == 3 || split.length == 4) && (ServerHandshakePacketListenerImpl.BYPASS_HOSTCHECK || ServerHandshakePacketListenerImpl.HOST_PATTERN.matcher(split[1]).matches())) { // Paper - Add bypass host check
++                if ((split.length == 2 || split.length == 3 || split.length == 4) && (ServerHandshakePacketListenerImpl.BYPASS_HOSTCHECK || ServerHandshakePacketListenerImpl.HOST_PATTERN.matcher(split[1]).matches())) { // Paper - Add bypass host check // MultiPaper - Add allow for only ip forwarding
+                     // Paper start - Unix domain socket support
+                     java.net.SocketAddress socketAddress = this.connection.getRemoteAddress();
+                     this.connection.hostname = split[0];
+                     this.connection.address = new java.net.InetSocketAddress(split[1], socketAddress instanceof java.net.InetSocketAddress ? ((java.net.InetSocketAddress) socketAddress).getPort() : 0);
+                     // Paper end - Unix domain socket support
+-                    this.connection.spoofedUUID = com.mojang.util.UndashedUuid.fromStringLenient(split[2]);
++                    if (split.length > 2) this.connection.spoofedUUID = com.mojang.util.UndashedUuid.fromStringLenient(split[2]); // MultiPaper - Add allow for only ip forwarding
+                 } else {
+                     Component message = Component.literal("If you wish to use IP forwarding, please enable it in your BungeeCord config as well!");
+                     this.connection.send(new ClientboundLoginDisconnectPacket(message));
+@@ -180,7 +180,7 @@ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketL
+                 if (split.length == 4) {
+                     this.connection.spoofedProfile = ServerHandshakePacketListenerImpl.gson.fromJson(split[3], com.mojang.authlib.properties.Property[].class);
+                 }
+-            } else if ((split.length == 3 || split.length == 4) && (ServerHandshakePacketListenerImpl.HOST_PATTERN.matcher(split[1]).matches())) {
++            } else if ((split.length == 2 || split.length == 3 || split.length == 4) && (ServerHandshakePacketListenerImpl.HOST_PATTERN.matcher(split[1]).matches())) { // MultiPaper - Add allow for only ip forwarding
+                 Component message = Component.literal("Unknown data in login hostname, did you forget to enable BungeeCord in spigot.yml?");
+                 this.connection.send(new ClientboundLoginDisconnectPacket(message));
+                 this.connection.disconnect(message);

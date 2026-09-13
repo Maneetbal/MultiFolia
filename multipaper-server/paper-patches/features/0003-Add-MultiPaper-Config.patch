@@ -1,0 +1,72 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Thu, 2 Oct 2025 16:07:52 +0800
+Subject: [PATCH] Add MultiPaper Config
+
+
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 0f36adc7e0652b05f272fcae150d0811907e9268..6c02d75d615be10044b93dbf0c0870609a926ae6 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -596,6 +596,20 @@ public final class CraftServer implements Server {
+             }
+             list.add(file);
+         }
++        // MultiPaper start - Add MultiPaper Config
++        @SuppressWarnings("unchecked")
++        final List<File> dirs = (List<File>) this.console.options.valuesOf("add-plugin-dir");
++        for (File dir : dirs) {
++            File[] files = dir.listFiles();
++            if (files != null) {
++                for (File file : files) {
++                    if (file.getName().endsWith(".jar")) {
++                        list.add(file);
++                    }
++                }
++            }
++        }
++        // MultiPaper end - Add MultiPaper Config
+         return list;
+     }
+ 
+@@ -620,6 +634,7 @@ public final class CraftServer implements Server {
+             // Spigot end
+             DefaultPermissions.registerCorePermissions();
+             CraftDefaultPermissions.registerCorePermissions();
++            puregero.multipaper.permissions.MultiPaperPermissions.registerCorePermissions(); // MultiPaper - Add MultiPaper Config
+             if (!io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) this.loadCustomPermissions(); // Paper
+             this.syncCommands();
+         }
+@@ -2982,6 +2997,7 @@ public final class CraftServer implements Server {
+         if (!io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) loadCustomPermissions();
+         DefaultPermissions.registerCorePermissions();
+         CraftDefaultPermissions.registerCorePermissions();
++        puregero.multipaper.permissions.MultiPaperPermissions.registerCorePermissions(); // MultiPaper - Add MultiPaper Config
+     }
+ 
+     @Override
+diff --git a/src/main/java/org/bukkit/craftbukkit/Main.java b/src/main/java/org/bukkit/craftbukkit/Main.java
+index e6ea34b18c6db63efa77bb67d3484e4d66315ed6..2d598e0c04c14cbe1787e233b0033308ab60f0fc 100644
+--- a/src/main/java/org/bukkit/craftbukkit/Main.java
++++ b/src/main/java/org/bukkit/craftbukkit/Main.java
+@@ -147,6 +147,20 @@ public class Main {
+                     .describedAs("Yml file");
+                 // Purpur end - Purpur config files
+ 
++                // MultiPaper start - Add MultiPaper Config
++                this.acceptsAll(asList("multipaper", "multipaper-settings"), "File for multipaper settings")
++                        .withRequiredArg()
++                        .ofType(File.class)
++                        .defaultsTo(new File("multipaper.yml"))
++                        .describedAs("Yml file");
++
++                this.acceptsAll(asList("add-plugin-dir", "add-plugin-directory", "add-extra-plugin-jars"), "Specify paths of a directory containing extra plugin jars to be loaded in addition to those in the plugins folder. This argument can be specified multiple times, once for each extra plugin directory path.")
++                        .withRequiredArg()
++                        .ofType(File.class)
++                        .defaultsTo(new File[]{})
++                        .describedAs("Plugin directory");
++                // MultiPaper end - Add MultiPaper Config
++
+                 this.accepts("server-name", "Name of the server")
+                         .withRequiredArg()
+                         .ofType(String.class)

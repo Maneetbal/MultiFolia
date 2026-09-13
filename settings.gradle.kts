@@ -1,16 +1,18 @@
-import java.util.Locale
-
 pluginManagement {
     repositories {
         gradlePluginPortal()
+        mavenLocal()
         maven("https://repo.papermc.io/repository/maven-public/")
     }
 }
 
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 rootProject.name = "multipaper"
 
-for (name in listOf("MultiPaper-MasterMessagingProtocol", "MultiPaper-API", "MultiPaper-Server", "MultiPaper-Master")) {
-    val projName = name.toLowerCase(Locale.ENGLISH)
-    include(projName)
-    findProject(":$projName")!!.projectDir = file(name)
-}
+include("multipaper-api")
+include("multipaper-server")
+include("multipaper-master")
+include("multipaper-mastermessagingprotocol")

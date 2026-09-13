@@ -1,0 +1,93 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Sun, 5 Oct 2025 22:05:53 +0800
+Subject: [PATCH] Sync player
+
+
+diff --git a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
+index f1ef191a9ca388112021959402a4912c54e177f7..5c0f60f01dc27c043563edd3cb4b79391c4cc4a9 100644
+--- a/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
++++ b/src/main/java/io/papermc/paper/adventure/ChatProcessor.java
+@@ -205,6 +205,8 @@ public final class ChatProcessor {
+         } else {
+             outgoingChat.sendOriginal(player, viewers, chatType);
+         }
++
++        puregero.multipaper.externalserverprotocol.PlayerChatMessagePacket.flush(); // MultiPaper - Sync player
+     }
+ 
+     interface OutgoingChat {
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
+index 374d39057f4913ff9586205ee2cf305a99279bae..8b64e79adec69017de6f47b00632817ba32b2469 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftHumanEntity.java
+@@ -81,7 +81,7 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+ 
+     private CraftInventoryPlayer inventory;
+     private final CraftInventory enderChest;
+-    protected final PermissibleBase perm = new PermissibleBase(this);
++    public final PermissibleBase perm = new PermissibleBase(this); // MultiPaper - Sync player - make public
+     private boolean op;
+     private GameMode mode;
+ 
+@@ -257,12 +257,12 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+ 
+     @Override
+     public boolean hasPermission(String name) {
+-        return this.perm.hasPermission(name);
++        return this.perm.hasPermission(name) || (this instanceof CraftPlayer player && player.getData("permission." + name) != null && Boolean.parseBoolean(player.getData("permission." + name))); // MultiPaper - Sync player
+     }
+ 
+     @Override
+     public boolean hasPermission(Permission perm) {
+-        return this.perm.hasPermission(perm);
++        return this.perm.hasPermission(perm) || (this instanceof CraftPlayer player && player.getData("permission." + perm.getName()) != null && Boolean.parseBoolean(player.getData("permission." + perm.getName()))); // MultiPaper - Sync player
+     }
+ 
+     @Override
+@@ -838,7 +838,7 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+ 
+     @Override
+     public void setSaturation(float value) {
+-        this.getHandle().getFoodData().setSaturation(value);
++        this.getHandle().getFoodData().setSaturation((ServerPlayer) this.getHandle(), value, true); // MultiPaper - Sync player
+     }
+ 
+     @Override
+@@ -848,7 +848,7 @@ public class CraftHumanEntity extends CraftLivingEntity implements HumanEntity {
+ 
+     @Override
+     public void setFoodLevel(int value) {
+-        this.getHandle().getFoodData().setFoodLevel(value);
++        this.getHandle().getFoodData().setFoodLevel((ServerPlayer) this.getHandle(), value, true); // MultiPaper - Sync player
+     }
+ 
+     @Override
+diff --git a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+index d64e5a4a9ce5980448f26894fd9277fb37ed94cf..ff7318b321e45918a70e1fcfd283aba087fdf012 100644
+--- a/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
++++ b/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
+@@ -565,6 +565,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+                 player.connection.send(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, getHandle()));
+             }
+         }
++        puregero.multipaper.MultiPaper.broadcastPacketToExternalServers(getHandle(), new puregero.multipaper.externalserverprotocol.PlayerListNameUpdatePacket(this.getHandle())); // MultiPaper - Sync player
+     }
+     @Override
+     public net.kyori.adventure.text.Component playerListName() {
+@@ -601,6 +602,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+                 player.connection.send(new ClientboundPlayerInfoUpdatePacket(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, this.getHandle()));
+             }
+         }
++        puregero.multipaper.MultiPaper.broadcastPacketToExternalServers(getHandle(), new puregero.multipaper.externalserverprotocol.PlayerListNameUpdatePacket(this.getHandle())); // MultiPaper - Sync player
+     }
+ 
+     @Override
+@@ -1437,6 +1439,7 @@ public class CraftPlayer extends CraftHumanEntity implements Player, PluginMessa
+ 
+     @Override
+     public void saveData() {
++        if (puregero.multipaper.MultiPaper.isExternalPlayer(this.getHandle())) return; // MultiPaper - Sync player
+         this.server.getHandle().playerIo.save(this.getHandle());
+     }
+ 

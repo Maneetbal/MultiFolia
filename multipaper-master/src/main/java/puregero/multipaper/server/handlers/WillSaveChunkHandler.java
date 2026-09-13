@@ -1,0 +1,11 @@
+package puregero.multipaper.server.handlers;
+
+import puregero.multipaper.mastermessagingprotocol.messages.masterbound.WillSaveChunkLaterMessage;
+import puregero.multipaper.server.LockManager;
+import puregero.multipaper.server.ServerConnection;
+
+public class WillSaveChunkHandler {
+    public static void handle(ServerConnection connection, WillSaveChunkLaterMessage message) {
+        LockManager.CHUNK_MANAGER.lockUntilWrite(message.world, message.cx, message.cz);
+    }
+}

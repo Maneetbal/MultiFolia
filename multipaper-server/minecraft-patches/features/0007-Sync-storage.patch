@@ -1,0 +1,201 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Sat, 4 Oct 2025 16:55:57 +0800
+Subject: [PATCH] Sync storage
+
+
+diff --git a/net/minecraft/server/level/ServerChunkCache.java b/net/minecraft/server/level/ServerChunkCache.java
+index 2df596b889ed5662f690b466dd958f319f24319f..49908b2523f68f75b8feff6e4bbc8e1ba3eca691 100644
+--- a/net/minecraft/server/level/ServerChunkCache.java
++++ b/net/minecraft/server/level/ServerChunkCache.java
+@@ -215,6 +215,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+         this.level = level;
+         this.mainThreadProcessor = new ServerChunkCache.MainThreadExecutor(level);
+         this.mainThread = Thread.currentThread();
++        /* // MultiPaper - Sync storage
+         Path dataFolder = levelStorage.getDimensionPath(level.dimension()).resolve("data");
+ 
+         try {
+@@ -222,6 +223,7 @@ public class ServerChunkCache extends ChunkSource implements ca.spottedleaf.moon
+         } catch (IOException e) {
+             LOGGER.error("Failed to create dimension data storage directory", e);
+         }
++        */ // MultiPaper - Sync storage
+ 
+         this.savedDataStorage = savedDataStorage; // Paper - initialize SavedDataStorage earlier
+         this.ticketStorage = this.savedDataStorage.computeIfAbsent(TicketStorage.TYPE);
+diff --git a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
+index 5f5c50811a9631b267d5472203fd9378c8562bc9..f8563dc79b6b30f9b3acba1093663e7a0d14735b 100644
+--- a/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
++++ b/net/minecraft/world/level/saveddata/maps/MapItemSavedData.java
+@@ -285,7 +285,7 @@ public class MapItemSavedData extends SavedData {
+             this.trackedDecorationCount--;
+         }
+ 
+-        if (decoration != null) this.setDecorationsDirty(); // Paper - only mark dirty if a change occurs
++        if (decoration != null) this.setDecorationsDirty(decoration.type()); // Paper - only mark dirty if a change occurs // MultiPaper - Sync storage - track the decoration being made dirty
+     }
+ 
+     public static void addTargetDecoration(final ItemStack itemStack, final BlockPos position, final String key, final Holder<MapDecorationType> decorationType) {
+@@ -325,7 +325,7 @@ public class MapItemSavedData extends SavedData {
+                     this.trackedDecorationCount++;
+                 }
+ 
+-                this.setDecorationsDirty();
++                this.setDecorationsDirty(newDecoration.type()); // MultiPaper - Sync storage - track the decoration being made dirty
+             }
+         }
+     }
+@@ -420,7 +420,8 @@ public class MapItemSavedData extends SavedData {
+         }
+     }
+ 
+-    private void setDecorationsDirty() {
++    private void setDecorationsDirty(Holder<MapDecorationType> type) {  // MultiPaper - Sync storage - track the decoration being made dirty
++        if (type == MapDecorationTypes.FRAME || type == MapDecorationTypes.PLAYER || type == MapDecorationTypes.PLAYER_OFF_LIMITS || type == MapDecorationTypes.PLAYER_OFF_MAP) return; // MultiPaper - Sync storage - don't save for these decorations
+         this.carriedBy.forEach(MapItemSavedData.HoldingPlayer::markDecorationsDirty);
+     }
+ 
+diff --git a/net/minecraft/world/level/storage/LevelStorageSource.java b/net/minecraft/world/level/storage/LevelStorageSource.java
+index 6f24eb34e0ecc2b03371c585a9538e9337a2295a..036e07bd65d5a4f3a5687295ab79491a1020c0d8 100644
+--- a/net/minecraft/world/level/storage/LevelStorageSource.java
++++ b/net/minecraft/world/level/storage/LevelStorageSource.java
+@@ -177,7 +177,15 @@ public class LevelStorageSource {
+ 
+         CompoundTag fileContents;
+         try {
+-            fileContents = NbtIo.readCompressed(dataLocation, NbtAccounter.unlimitedHeap());
++            // MultiPaper start - Sync storage
++            byte[] data = puregero.multipaper.MultiPaper.readData(dataLocation.toString(), savedDataType.id());
++            if (data == null || data.length == 0) {
++                throw new IOException("No such file or empty file data at " + dataLocation);
++            }
++            try (java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data)) {
++                fileContents = NbtIo.readCompressed(in, NbtAccounter.unlimitedHeap());
++            }
++            // MultiPaper end - Sync storage
+         } catch (IOException e) {
+             return DataResult.error(e::getMessage);
+         }
+@@ -201,8 +209,7 @@ public class LevelStorageSource {
+         fullTag.put("data", encoded);
+         NbtUtils.addCurrentDataVersion(fullTag);
+         Path path = type.id().withSuffix(".dat").resolveAgainst(worldFolder.resolve("data"));
+-        FileUtil.createDirectoriesSafe(path.getParent());
+-        NbtIo.writeCompressed(fullTag, path);
++        puregero.multipaper.MultiPaper.writeData(path.toString(), type.id(), fullTag); // MultiPaper - Sync storage
+     }
+ 
+     public String getName() {
+@@ -276,7 +283,13 @@ public class LevelStorageSource {
+     }
+ 
+     private static CompoundTag readLevelDataTagRaw(final Path dataFile) throws IOException {
+-        return NbtIo.readCompressed(dataFile, NbtAccounter.uncompressedQuota());
++        // MultiPaper start - Sync storage
++        CompoundTag tag = puregero.multipaper.MultiPaper.readLevel(dataFile.getParent().getFileName().toString());
++        if (tag == null) {
++            throw new IOException("Attempting to get level.dat that does not exist at " + dataFile);
++        }
++        return tag;
++        // MultiPaper end - Sync storage
+     }
+ 
+     private LevelSummary readLevelSummary(final LevelStorageSource.LevelDirectory level, final boolean locked) {
+@@ -354,6 +367,7 @@ public class LevelStorageSource {
+     }
+ 
+     private static @Nullable Tag readLightweightData(final Path dataFile) throws IOException {
++        if (true) return puregero.multipaper.MultiPaper.readLevel(dataFile.getParent().getFileName().toString()); // MultiPaper - Sync storage
+         SkipFields parser = new SkipFields(
+             new FieldSelector("Data", CompoundTag.TYPE, "Player"), new FieldSelector("Data", CompoundTag.TYPE, "WorldGenSettings")
+         );
+@@ -600,6 +614,12 @@ public class LevelStorageSource {
+             Path worldDir = this.levelDirectory.path();
+ 
+             try {
++                // MultiPaper start - Sync storage
++                if (true) {
++                    puregero.multipaper.MultiPaper.writeLevel(worldDir.getFileName().toString(), root);
++                    return;
++                }
++                // MultiPaper end - Sync storage
+                 Path dataFile = Files.createTempFile(worldDir, "level", ".dat");
+                 NbtIo.writeCompressed(root, dataFile);
+                 Path oldDataFile = this.levelDirectory.oldDataFile();
+@@ -719,7 +739,13 @@ public class LevelStorageSource {
+         }
+ 
+         public boolean hasWorldData() {
+-            return Files.exists(this.levelDirectory.dataFile()) || Files.exists(this.levelDirectory.oldDataFile());
++            // MultiPaper start - Sync storage
++            try {
++                return puregero.multipaper.MultiPaper.readLevel(this.levelDirectory.directoryName()) != null;
++            } catch (IOException e) {
++                throw new RuntimeException(e);
++            }
++            // MultiPaper end - Sync storage
+         }
+ 
+         @Override
+diff --git a/net/minecraft/world/level/storage/SavedDataStorage.java b/net/minecraft/world/level/storage/SavedDataStorage.java
+index f359e53024019f35aaa5cd8477da708bda2fc57a..37376da7aa50b168a57a9759ea5cd164a0f0bea1 100644
+--- a/net/minecraft/world/level/storage/SavedDataStorage.java
++++ b/net/minecraft/world/level/storage/SavedDataStorage.java
+@@ -86,8 +86,11 @@ public class SavedDataStorage implements AutoCloseable {
+     private <T extends SavedData> @Nullable T readSavedData(final SavedDataType<T> type) {
+         try {
+             Path file = this.getDataFile(type.id());
+-            if (Files.exists(file)) {
+-                CompoundTag tag = this.readTagFromDisk(file, type.dataFixType(), SharedConstants.getCurrentVersion().dataVersion().version());
++            // MultiPaper start - Sync storage
++            if (true) {
++                CompoundTag tag = this.readTagFromDisk(file, type.id(), type.dataFixType(), SharedConstants.getCurrentVersion().dataVersion().version()); // MultiPaper - Sync storage
++                if (tag == null) return null;
++            // MultiPaper end - Sync storage
+                 RegistryOps<Tag> ops = this.registries.createSerializationContext(NbtOps.INSTANCE);
+                 return type.codec()
+                     .parse(ops, tag.get("data"))
+@@ -106,9 +109,15 @@ public class SavedDataStorage implements AutoCloseable {
+         data.setDirty();
+     }
+ 
+-    public CompoundTag readTagFromDisk(final Path dataFile, final DataFixTypes type, final int newVersion) throws IOException {
++    // MultiPaper start - Sync storage
++    public @Nullable CompoundTag readTagFromDisk(final Path dataFile, final Identifier identifier, final DataFixTypes type, final int newVersion) throws IOException {
++        byte[] data = puregero.multipaper.MultiPaper.readData(dataFile.toString(), identifier);
++        if (data == null || data.length == 0) {
++            return null;
++        }
++    // MultiPaper end - Sync storage
+         try (
+-            InputStream in = Files.newInputStream(dataFile);
++            java.io.ByteArrayInputStream in = new java.io.ByteArrayInputStream(data); // MultiPaper - Sync storage
+             PushbackInputStream inputStream = new PushbackInputStream(new FastBufferedInputStream(in), 2);
+         ) {
+             CompoundTag tag;
+@@ -125,6 +134,14 @@ public class SavedDataStorage implements AutoCloseable {
+         }
+     }
+ 
++    // MultiPaper start - Sync storage
++    // save a PersistentBase
++    public void save(SavedDataType<?> type, SavedData savedData) {
++        RegistryOps<Tag> registryOps = this.registries.createSerializationContext(NbtOps.INSTANCE);
++        this.tryWrite(type, this.encodeUnchecked(type, savedData, registryOps));
++    }
++    // MultiPaper end - Sync storage
++
+     private boolean isGzip(final PushbackInputStream inputStream) throws IOException {
+         byte[] header = new byte[2];
+         boolean gzip = false;
+@@ -207,8 +224,7 @@ public class SavedDataStorage implements AutoCloseable {
+         Path path = this.getDataFile(type.id());
+ 
+         try {
+-            FileUtil.createDirectoriesSafe(path.getParent());
+-            NbtIo.writeCompressed(tag, path);
++            puregero.multipaper.MultiPaper.writeData(path.toString(), type.id(), tag); // MultiPaper - Sync storage
+         } catch (IOException e) {
+             LOGGER.error("Could not save data to {}", path.getFileName(), e);
+         }

@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Thu, 5 Mar 2026 01:22:03 +0800
+Subject: [PATCH] Rebrand to MultiPaper
+
+
+diff --git a/src/main/java/org/purpurmc/purpur/PurpurVersionFetcher.java b/src/main/java/org/purpurmc/purpur/PurpurVersionFetcher.java
+index f2c22af968fbdbbea1bbd07712733c74e0b42333..acd4613b03bed703f8927997ae5ee64b58ecbe6b 100644
+--- a/src/main/java/org/purpurmc/purpur/PurpurVersionFetcher.java
++++ b/src/main/java/org/purpurmc/purpur/PurpurVersionFetcher.java
+@@ -36,8 +36,10 @@ public class PurpurVersionFetcher implements VersionFetcher {
+     private static final Logger LOGGER = LogUtils.getClassLogger();
+     private static final int DISTANCE_ERROR = -1;
+     private static final int DISTANCE_UNKNOWN = -2;
+-    private static final String DOWNLOAD_PAGE = "https://purpurmc.org/downloads";
+-    private static final String REPOSITORY = "PurpurMC/Purpur";
++    // MultiPaper start - Rebrand to MultiPaper
++    private static final String DOWNLOAD_PAGE = "https://multipaper.io/download.html";
++    private static final String REPOSITORY = "MultiPaper/MultiPaper";
++    // MultiPaper end - Rebrand to MultiPaper
+     private static final ServerBuildInfo BUILD_INFO;
+     private static final String USER_AGENT;
+     private static final Gson GSON = new Gson();
+@@ -72,7 +74,7 @@ public class PurpurVersionFetcher implements VersionFetcher {
+ 
+     private static Component getUpdateStatusMessage() {
+         final OptionalInt buildNumber = BUILD_INFO.buildNumber();
+-        if (buildNumber.isPresent()) {
++        if (false && buildNumber.isPresent()) { // MultiPaper - Rebrand to MultiPaper
+             distance = fetchDistanceFromSiteApi(buildNumber.getAsInt());
+         } else {
+             final Optional<String> gitBranch = BUILD_INFO.gitBranch();

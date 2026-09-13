@@ -46,10 +46,10 @@ out/
 # other stuff
 run/
 
-MultiPaper-Server
-MultiPaper-API
-
-*.sh
-multipaper.jar
-
-!gradle/wrapper/gradle-wrapper.jar
+/multipaper-server/build.gradle.kts
+/multipaper-server/src/minecraft
+/multipaper-api/build.gradle.kts
+/purpur-server
+/purpur-api
+/paper-server
+/paper-api

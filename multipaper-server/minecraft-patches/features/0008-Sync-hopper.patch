@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Koyorice <87787929+Koyorice@users.noreply.github.com>
+Date: Sun, 5 Oct 2025 18:30:59 +0800
+Subject: [PATCH] Sync hopper
+
+
+diff --git a/net/minecraft/world/level/block/entity/BlockEntity.java b/net/minecraft/world/level/block/entity/BlockEntity.java
+index e7a55757f5272abc623afeb18eafbfda5730ec7d..71f78904d3f06ec02b91c9e3a3492b257750b21f 100644
+--- a/net/minecraft/world/level/block/entity/BlockEntity.java
++++ b/net/minecraft/world/level/block/entity/BlockEntity.java
+@@ -39,7 +39,7 @@ import org.jspecify.annotations.Nullable;
+ import org.slf4j.Logger;
+ 
+ public abstract class BlockEntity implements DebugValueSource, TypedInstance<BlockEntityType<?>> {
+-    static boolean ignoreBlockEntityUpdates; // Paper - Perf: Optimize Hoppers
++    public static boolean ignoreBlockEntityUpdates; // Paper - Perf: Optimize Hoppers // MultiPaper - Sync hopper - make public
+     // CraftBukkit start - data containers
+     private static final org.bukkit.craftbukkit.persistence.CraftPersistentDataTypeRegistry DATA_TYPE_REGISTRY = new org.bukkit.craftbukkit.persistence.CraftPersistentDataTypeRegistry();
+     public final org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer persistentDataContainer;
+diff --git a/net/minecraft/world/level/block/entity/HopperBlockEntity.java b/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+index 8ba10c39a40f770d2a293ab4aa32afef837c6c5f..2ae5f0b216840c79c1770a5fb11724042a6b5cb4 100644
+--- a/net/minecraft/world/level/block/entity/HopperBlockEntity.java
++++ b/net/minecraft/world/level/block/entity/HopperBlockEntity.java
+@@ -255,7 +255,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                         origItemStack.setCount(originalItemCount - movedItemCount + remainingItemCount);
+                     }
+                     hopper.setItem(i, origItemStack);
+-                    destination.setChanged();
++                    hopper.setChanged(); // MultiPaper - Sync hopper - redundant to have destination, handled in addItem, changed to hopper
+                     return true;
+                 }
+                 origItemStack.setCount(originalItemCount);
+@@ -285,6 +285,21 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+             }
+         }
+ 
++        // MultiPaper start - Sync hopper
++        // logic for pulling from double chests that span multiple servers
++        if (container instanceof net.minecraft.world.CompoundContainer compoundContainer) {
++            BlockEntity primaryChest = puregero.multipaper.MultiPaperContainerHandler.getPrimaryChest(compoundContainer);
++            ca.spottedleaf.moonrise.patches.chunk_system.scheduling.NewChunkHolder newChunkHolder = puregero.multipaper.MultiPaper.getChunkHolder((net.minecraft.server.level.ServerLevel) primaryChest.getLevel(), primaryChest.getBlockPos());
++            if (puregero.multipaper.MultiPaper.isChunkExternal(newChunkHolder)) {
++                newChunkHolder.externalOwner.getConnection().send(new puregero.multipaper.externalserverprotocol.PullItemFromContainerPacket(primaryChest, i, origItemStack, hopper));
++                if (level.paperConfig().hopper.cooldownWhenFull) {
++                    applyCooldown(hopper);
++                }
++                return true;
++            }
++        }
++        // MultiPaper end - Sync hopper
++
+         final ItemStack remainingItem = addItem(container, hopper, movedItem, null);
+         final int remainingItemCount = remainingItem.getCount();
+         if (remainingItemCount != movedItemCount) {
+@@ -580,6 +595,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+         final @Nullable Container from, final Container container, ItemStack itemStack, final int slot, final @Nullable Direction direction
+     ) {
+         ItemStack current = container.getItem(slot);
++        int startingStackSize = current.getCount(); // MultiPaper - Sync hopper
+         if (canPlaceItemInContainer(container, itemStack, slot, direction)) {
+             boolean success = false;
+             boolean wasEmpty = container.isEmpty();
+@@ -614,7 +630,7 @@ public class HopperBlockEntity extends RandomizableContainerBlockEntity implemen
+                     hopperBlockEntity.setCooldown(hopperBlockEntity.level.spigotConfig.hopperTransfer - skipTickCount); // Spigot
+                 }
+ 
+-                container.setChanged();
++                if (!puregero.multipaper.MultiPaperContainerHandler.increaseItemExternal(container, slot, container.getItem(slot), container.getItem(slot).getCount() - startingStackSize)) container.setChanged(); // MultiPaper - Sync hopper - don't change external containers
+             }
+         }
+ 
