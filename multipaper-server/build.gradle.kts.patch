@@ -5,36 +5,31 @@
          }
      }
 -    activeFork = purpur
-+    // activeFork = purpur // MultiPaper
-     // Purpur end - Rebrand
+-    // Purpur end - Rebrand
++    // activeFork = purpur // MultiFolia
  
-+    // MultiPaper start - Rebrand to MultiPaper
-+    val multipaper = forks.register("multipaper") {
-+        forks = purpur
-+        upstream.patchRepo("paperServer") {
-+            upstreamRepo = purpur.patchedRepo("paperServer")
+-    // MultiPaper start - Rebrand to MultiPaper
+-    val multipaper = forks.register("multipaper") {
++    // MultiFolia start - server integration fork
++    val multifolia = forks.register("multifolia") {
+         forks = purpur
+         upstream.patchRepo("paperServer") {
+             upstreamRepo = purpur.patchedRepo("paperServer")
+-            patchesDir = rootDirectory.dir("multipaper-server/paper-patches")
 +            patchesDir = rootDirectory.dir("multipaper-server/paper-patches")
-+            outputDir = rootDirectory.dir("paper-server")
-+        }
-+        upstream.patchDir("purpurServer") {
-+            upstreamPath = "purpur-server"
-+            excludes = setOf(
-+                "src/minecraft",
-+                "paper-patches",
-+                "minecraft-patches",
-+                "build.gradle.kts",
-+                "build.gradle.kts.patch"
-+            )
-+            patchesDir = rootDirectory.dir("multipaper-server/purpur-patches")
-+            outputDir = rootDirectory.dir("purpur-server")
-+        }
-+    }
-+    activeFork = multipaper
-+    // MultiPaper end - Rebrand to MultiPaper
-+
-     /*updatingMinecraft { // Purpur start - TODO - snapshot - we don't need this
-         // oldPaperCommit = "d4fe85375af18bfa88f44d7c1e6a61904ae550cc"
-     }*/ // Purpur end - TODO - snapshot - we don't need this
+             outputDir = rootDirectory.dir("paper-server")
+         }
+         upstream.patchDir("purpurServer") {
+             upstreamPath = "purpur-server"
+             excludes = setOf(
+@@ -48,8 +_,8 @@
+             outputDir = rootDirectory.dir("purpur-server")
+         }
+     }
+-    activeFork = multipaper
+-    // MultiPaper end - Rebrand to MultiPaper
++    activeFork = multifolia
++    // MultiFolia end - server integration fork
 @@ -105,10 +_,14 @@
      main {
          java { srcDir("../paper-server/src/main/java") }
@@ -50,17 +45,17 @@
      }
  }
  val log4jPlugins = sourceSets.create("log4jPlugins") {
-@@ -137,7 +_,12 @@
+@@ -137,14 +_,14 @@
  }
  
  dependencies {
 -    implementation(project(":purpur-api")) // Purpur
-+    // MultiPaper start - Rebrand to MultiPaper
++    // MultiFolia start
 +    implementation(project(":multipaper-api"))
 +    implementation(project(":multipaper-mastermessagingprotocol"))
 +    implementation("io.methvin:directory-watcher:0.19.1")
 +    implementation("com.github.luben:zstd-jni:1.5.7-4")
-+    // MultiPaper end - Rebrand to MultiPaper
++    // MultiFolia end
      implementation("ca.spottedleaf:leafpile:1.0.0")
      implementation("org.jline:jline-terminal-ffm:3.27.1") // use ffm on java 22+
      implementation("org.jline:jline-terminal-jni:3.27.1") // fall back to jni on java 21
@@ -68,19 +63,19 @@
          val gitBranch = git.exec(providers, "rev-parse", "--abbrev-ref", "HEAD").get().trim()
          attributes(
              "Main-Class" to "org.bukkit.craftbukkit.Main",
--            "Implementation-Title" to "Purpur", // Purpur
-+            "Implementation-Title" to "MultiPaper", // Purpur // MultiPaper
+-            "Implementation-Title" to "MultiPaper", // Purpur // MultiPaper
++            "Implementation-Title" to "MultiFolia",
              "Implementation-Version" to implementationVersion,
              "Implementation-Vendor" to date,
--            "Specification-Title" to "Purpur", // Purpur
-+            "Specification-Title" to "MultiPaper", // Purpur // MultiPaper
+-            "Specification-Title" to "MultiPaper", // Purpur // MultiPaper
++            "Specification-Title" to "MultiFolia",
              "Specification-Version" to project.version,
--            "Specification-Vendor" to "Purpur Team", // Purpur
--            "Brand-Id" to "purpurmc:purpur", // Purpur
--            "Brand-Name" to "Purpur", // Purpur
-+            "Specification-Vendor" to "MultiPaper", // Purpur // MultiPaper
-+            "Brand-Id" to "multipaper:multipaper", // Purpur // MultiPaper
-+            "Brand-Name" to "MultiPaper", // Purpur // MultiPaper
+-            "Specification-Vendor" to "MultiPaper", // Purpur // MultiPaper
+-            "Brand-Id" to "multipaper:multipaper", // Purpur // MultiPaper
+-            "Brand-Name" to "MultiPaper", // Purpur // MultiPaper
++            "Specification-Vendor" to "MultiFolia",
++            "Brand-Id" to "multifolia:multifolia",
++            "Brand-Name" to "MultiFolia",
              "Build-Number" to (build ?: ""),
              "Build-Time" to buildTime.toString(),
              "Git-Branch" to gitBranch,
