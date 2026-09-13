@@ -1,3 +1,3 @@
 # MultiFolia
 
-Triggering the Folia 26.2 conversion pipeline after fixing patch Git identity.
+Starting a clean Folia 26.2 materialization pass with the repaired conversion runner.
