@@ -1,55 +1,19 @@
-.gradle/
-build/
+# Ignore Gradle project-specific cache directory
+.gradle
 
-# Eclipse stuff
-.classpath
-.project
-.settings/
+# Ignore Gradle build output directory
+build
 
-# VSCode stuff
-.vscode/
+/run
 
-# netbeans
-nbproject/
-nbactions.xml
-
-# we use maven!
-build.xml
-
-# maven
-target/
-dependency-reduced-pom.xml
-
-# vim
-.*.sw[a-p]
-
-# various other potential build files
-build/
-bin/
-dist/
-manifest.mf
-
-# Mac filesystem dust
-.DS_Store/
-.DS_Store
-
-# intellij
-*.iml
-*.ipr
-*.iws
-.idea/
-out/
-
-# Linux temp files
-*~
-
-# other stuff
-run/
-
-/multipaper-server/build.gradle.kts
-/multipaper-server/src/minecraft
-/multipaper-api/build.gradle.kts
-/purpur-server
-/purpur-api
+/folia-server/build.gradle.kts
+/folia-server/src/minecraft
 /paper-server
+/folia-api/build.gradle.kts
 /paper-api
+/paper-api-generator
+/paper-checkstyle
+/.checkstyle
+/folia-checkstyle/build.gradle.kts
+
+.idea/

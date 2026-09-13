@@ -1,20 +1,27 @@
-name: Server crash or Stacktrace
-description: Report server crashes or scary stacktraces
-labels: [ "status: needs triage" ]
+name: Performance Problem
+description: Report performance related problems or other areas of concern
+labels: [ "status: needs triage", "type: performance" ]
 body:
-  - type: textarea
+  - type: markdown
     attributes:
-      label: Stack trace
-      description: |
-        We need all of the stack trace! Do not cut off parts of it. Please do not use attachments.
-        If you prefer, you can use a paste site like https://paste.gg.
       value: |
-        ```
-        paste your stack trace or a paste.gg link here!
-        ```
-      placeholder: Please don't remove the backticks; it makes your issue a lot harder to read!
+        Before creating an issue regarding server performance, please consider reaching out for support in the
+        `#folia-help` channel of [our Discord](https://discord.gg/papermc)!
+
+  - type: input
+    attributes:
+      label: Profile link
+      description: We ask that all profiles are a link, not a screenshot. Screenshots inhibit our ability to figure out the real cause of the issue.
+      placeholder: "Example: https://spark.lucko.me/abcdefg12h"
     validations:
       required: true
+
+  - type: textarea
+    attributes:
+      label: Description of issue
+      description: If applicable, please describe your issue.
+    validations:
+      required: false
 
   - type: textarea
     attributes:
@@ -27,10 +34,15 @@ body:
 
   - type: textarea
     attributes:
-      label: Actions to reproduce (if known)
-      description: This may include a build schematic, a video, or detailed instructions to help reconstruct the issue. Anything helps!
+      label: Server config files
+      description: We need bukkit.yml, spigot.yml, paper-global.yml, paper-world-defaults.yml and server.properties. If you use per-world Paper configs, make sure to include them. You can paste it below or use a paste site like https://paste.gg.
+      value: |
+        ```
+        Paste configs or paste.gg link here!
+        ```
+      placeholder: Please don't remove the backticks; it makes your issue a lot harder to read!
     validations:
-      required: false
+      required: true
 
   - type: textarea
     attributes:
@@ -58,19 +70,15 @@ body:
     attributes:
       label: Other
       description: |
-        Please include other helpful information below, if any.
+        Please include other helpful links below.
         The more information we receive, the quicker and more effective we can be at finding the solution to the issue.
     validations:
       required: false
-
   - type: markdown
     attributes:
       value: |
         Before submitting this issue, please ensure the following:
 
         1. You are running the latest version of Folia from [our downloads page](https://papermc.io/downloads).
-        2. Your version of Minecraft is supported by Folia.
-
-        If your server crash log contains `DO NOT REPORT THIS TO FOLIA`, please ask in our
-        [Discord](https://discord.gg/papermc) before opening this issue. These messages are informing you of server
-        lag and providing debug information.
+        2. You searched for and ensured there isn't already an open issue regarding this.
+        3. Your version of Minecraft is supported by Folia.
