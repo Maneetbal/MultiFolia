@@ -10,9 +10,20 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 
-rootProject.name = "multipaper"
+rootProject.name = "multifolia"
 
-include("multipaper-api")
-include("multipaper-server")
-include("multipaper-master")
-include("multipaper-mastermessagingprotocol")
+include("folia-api")
+include("folia-server")
+include("folia-checkstyle")
+
+gradle.lifecycle.beforeProject {
+    val mcVersion = providers.gradleProperty("mcVersion").get().trim()
+    val foliaVersionChannel = providers.gradleProperty("channel").get().trim()
+    val foliaBuildNumber = providers.environmentVariable("BUILD_NUMBER").orNull?.trim()?.toInt()
+    val versionString = if (foliaBuildNumber == null) {
+        "$mcVersion.local-SNAPSHOT"
+    } else {
+        "$mcVersion.build.$foliaBuildNumber-${foliaVersionChannel.lowercase()}"
+    }
+    version = versionString
+}
