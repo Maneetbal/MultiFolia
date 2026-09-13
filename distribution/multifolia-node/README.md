@@ -32,3 +32,5 @@ For now:
 4. Never point two machines at the same live world files.
 
 A future release will add an executable node runtime here once the distributed worker layer is implemented and validated. That runtime will communicate with the server through a dedicated coordination/state-transfer protocol rather than shared concurrent world files.
+
+The CI pipeline validates the packaged server artifact separately; the API JAR in this directory is not itself an executable node.
