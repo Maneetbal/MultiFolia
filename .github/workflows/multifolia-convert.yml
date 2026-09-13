@@ -3,13 +3,14 @@ name: Convert MultiFolia to Folia 26.2
 on:
   pull_request:
     types: [synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   convert:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'conversion/folia-26.2'
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'conversion/folia-26.2')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,166 +21,35 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-      - name: Import official Folia ver/26.2.x and add MultiFolia layer
+      - name: Import official Folia ver/26.2.x
         shell: bash
         run: |
           set -euo pipefail
           git clone --depth 1 --branch ver/26.2.x https://github.com/PaperMC/Folia.git /tmp/folia
           rsync -a --delete --exclude='.git' /tmp/folia/ ./
           rm -rf /tmp/folia
-
+          # Keep this conversion workflow present after the upstream import, which removes non-Folia files.
+          git show origin/main:.github/workflows/multifolia-convert.yml > .github/workflows/multifolia-convert.yml
           python3 - <<'PY'
           from pathlib import Path
-          settings = Path('settings.gradle.kts').read_text(encoding='utf-8')
-          Path('settings.gradle.kts').write_text(settings.replace('rootProject.name = "folia"', 'rootProject.name = "multifolia"'), encoding='utf-8')
-          props = Path('gradle.properties').read_text(encoding='utf-8').replace('group=dev.folia', 'group=dev.multifolia')
-          Path('gradle.properties').write_text(props, encoding='utf-8')
-          Path('README.md').write_text('''# MultiFolia\n\nMultiFolia is a genuine Folia 26.2 fork. Folia remains the server engine and retains its regionized multithreading and thread/ownership safety model.\n\n## Foundation\n\nThe source tree is the official `PaperMC/Folia` `ver/26.2.x` tree. The project uses Folia's RegionScheduler, EntityScheduler, GlobalRegionScheduler, AsyncScheduler, threaded regions, and ownership checks. The former distributed-server implementation was removed rather than retained behind a compatibility layer.\n\n## Target\n\n- Minecraft 26.2\n- Java 25\n- Maven group `dev.multifolia`\n- Upstream `PaperMC/Folia` `ver/26.2.x`\n\n## Distributed MultiFolia\n\nThe first distributed phase is intentionally an in-process control plane: worker registration/health plus single-writer region leases and fencing tokens. Live world-file replication, shared-region writes, and cross-worker mutation are not enabled until a state-transfer protocol can preserve Folia thread ownership.\n\nPlanned phases are authenticated worker discovery, stateful region handoff, cross-worker routing, failure fencing/recovery, and `/multifolia` operational commands (`servers`, `list`, `debug`, `map`, with optional `/mf`).\n\n## Plugin compatibility\n\nOnly Folia-compatible plugins are expected to be safe. Paper compatibility is not assumed automatically. Priority targets: AuthMe, CombatLog, EasyHome, EzRTP, Floodgate, Geyser, GrimAC, LuckPerms, PacketEvents, PASF, PlaceholderAPI, RaycastedAntiESP, SkinsRestorer, SnowballDamage, TAB, ViaBackwards, ViaVersion. Axiom is excluded.\n\n## Build\n\n```bash\n./gradlew applyAllPatches\n./gradlew build\n```\n''', encoding='utf-8')
-          Path('MULTIFOLIA_DISTRIBUTED_ARCHITECTURE.md').write_text('''# MultiFolia distributed architecture\n\nThe distributed layer is additive to Folia and never replaces its scheduler.\n\n## Safety invariants\n\n- One active owner for a region at a time.\n- Every ownership grant receives a monotonic fencing token.\n- Stale owners cannot renew or release without the current token.\n- Region work continues to execute under Folia's thread ownership rules.\n- Workers never concurrently write each other's live region files.\n- Handoff requires explicit state transfer and acknowledgement before mutation by the new owner.\n\n## Current phase\n\nOnly local control-plane primitives are enabled. Network transport, world state transfer, cross-region routing, failure recovery, and operational command registration are deliberately isolated for later phases.\n''', encoding='utf-8')
+          p = Path('settings.gradle.kts')
+          p.write_text(p.read_text().replace('rootProject.name = "folia"', 'rootProject.name = "multifolia"'), encoding='utf-8')
+          p = Path('gradle.properties')
+          p.write_text(p.read_text().replace('group=dev.folia', 'group=dev.multifolia'), encoding='utf-8')
           PY
-
           rm -rf multipaper-api multipaper-server multipaper-master multipaper-mastermessagingprotocol
-          rm -f assets/multifolia-diagram.jpg
+          rm -f assets/multifolia-diagram.jpg DEVELOPING_A_MULTISERVER_PLUGIN.md
           rmdir assets 2>/dev/null || true
-          rm -f DEVELOPING_A_MULTISERVER_PLUGIN.md
-
-          mkdir -p folia-server/src/main/java/dev/multifolia/distributed
-          mkdir -p folia-server/src/test/java/dev/multifolia/distributed
-          cat > folia-server/src/main/java/dev/multifolia/distributed/MultiFoliaDistributedControlPlane.java <<'EOF'
-          package dev.multifolia.distributed;
-
-          import java.time.Duration;
-          import java.time.Instant;
-          import java.util.List;
-          import java.util.Map;
-          import java.util.Objects;
-          import java.util.Optional;
-          import java.util.concurrent.ConcurrentHashMap;
-          import java.util.concurrent.atomic.AtomicLong;
-
-          public final class MultiFoliaDistributedControlPlane {
-              public enum WorkerState { REGISTERED, HEALTHY, DRAINING, UNHEALTHY, OFFLINE }
-              public record Worker(String id, WorkerState state, Instant lastHeartbeat, String endpoint) {
-                  public Worker { Objects.requireNonNull(id); Objects.requireNonNull(state); Objects.requireNonNull(lastHeartbeat); }
-                  public Worker heartbeat(Instant now) { return new Worker(id, WorkerState.HEALTHY, now, endpoint); }
-              }
-              public record RegionKey(String worldKey, int regionX, int regionZ) {
-                  public RegionKey { Objects.requireNonNull(worldKey); }
-              }
-              public record Lease(String workerId, long fencingToken, long expiresAtNanos) {
-                  public boolean expired(long now) { return now >= expiresAtNanos; }
-              }
-
-              private final Map<String, Worker> workers = new ConcurrentHashMap<>();
-              private final Map<RegionKey, Lease> leases = new ConcurrentHashMap<>();
-              private final AtomicLong fencing = new AtomicLong();
-
-              public Worker registerWorker(String id, String endpoint) {
-                  Instant now = Instant.now();
-                  return workers.compute(id, (k, old) -> old == null ? new Worker(id, WorkerState.REGISTERED, now, endpoint) : old.heartbeat(now));
-              }
-              public Worker heartbeat(String id) {
-                  Worker worker = workers.computeIfPresent(id, (k, old) -> old.heartbeat(Instant.now()));
-                  if (worker == null) throw new IllegalArgumentException("Unknown worker: " + id);
-                  return worker;
-              }
-              public List<Worker> workers() { return workers.values().stream().sorted((a,b) -> a.id().compareTo(b.id())).toList(); }
-              public Optional<Lease> current(RegionKey key) {
-                  Lease lease = leases.get(key);
-                  if (lease == null) return Optional.empty();
-                  if (lease.expired(System.nanoTime())) { leases.remove(key, lease); return Optional.empty(); }
-                  return Optional.of(lease);
-              }
-              public Optional<Lease> tryAcquire(RegionKey key, String workerId, Duration ttl) {
-                  if (ttl.isZero() || ttl.isNegative()) throw new IllegalArgumentException("ttl must be positive");
-                  long now = System.nanoTime();
-                  long expiry = Math.addExact(now, ttl.toNanos());
-                  Lease[] acquired = new Lease[1];
-                  leases.compute(key, (k, old) -> {
-                      if (old != null && !old.expired(now) && !old.workerId().equals(workerId)) return old;
-                      Lease lease = new Lease(workerId, fencing.incrementAndGet(), expiry);
-                      acquired[0] = lease;
-                      return lease;
-                  });
-                  return Optional.ofNullable(acquired[0]);
-              }
-              public boolean renew(RegionKey key, String workerId, long token, Duration ttl) {
-                  long expiry = Math.addExact(System.nanoTime(), ttl.toNanos());
-                  boolean[] ok = new boolean[1];
-                  leases.computeIfPresent(key, (k, old) -> {
-                      if (old.workerId().equals(workerId) && old.fencingToken() == token && !old.expired(System.nanoTime())) {
-                          ok[0] = true; return new Lease(workerId, token, expiry);
-                      }
-                      return old;
-                  });
-                  return ok[0];
-              }
-              public boolean release(RegionKey key, String workerId, long token) {
-                  Lease old = leases.get(key);
-                  return old != null && old.workerId().equals(workerId) && old.fencingToken() == token && leases.remove(key, old);
-              }
-          }
-          EOF
-
-          cat > folia-server/src/test/java/dev/multifolia/distributed/MultiFoliaDistributedControlPlaneTest.java <<'EOF'
-          package dev.multifolia.distributed;
-
-          import static org.junit.jupiter.api.Assertions.*;
-          import java.time.Duration;
-          import org.junit.jupiter.api.Test;
-
-          class MultiFoliaDistributedControlPlaneTest {
-              @Test void ownershipIsSingleWriterAndFenced() {
-                  MultiFoliaDistributedControlPlane cp = new MultiFoliaDistributedControlPlane();
-                  var key = new MultiFoliaDistributedControlPlane.RegionKey("minecraft:overworld", 1, 2);
-                  var first = cp.tryAcquire(key, "a", Duration.ofSeconds(5)).orElseThrow();
-                  assertTrue(cp.tryAcquire(key, "b", Duration.ofSeconds(5)).isEmpty());
-                  assertTrue(cp.release(key, "a", first.fencingToken()));
-                  var second = cp.tryAcquire(key, "b", Duration.ofSeconds(5)).orElseThrow();
-                  assertNotEquals(first.fencingToken(), second.fencingToken());
-                  assertFalse(cp.release(key, "a", first.fencingToken()));
-              }
-          }
-          EOF
-
-          cat > .github/workflows/build.yml <<'EOF'
-          name: Build MultiFolia
-          on: [push, pull_request, workflow_dispatch]
-          permissions:
-            contents: read
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - uses: actions/setup-java@v5
-                  with:
-                    distribution: temurin
-                    java-version: '25'
-                - uses: gradle/actions/setup-gradle@v4
-                - run: ./gradlew applyAllPatches --stacktrace
-                - run: ./gradlew build --stacktrace
-                - uses: actions/upload-artifact@v4
-                  with:
-                    name: multifolia
-                    path: |
-                      folia-server/build/libs/*.jar
-                      folia-api/build/libs/*.jar
-          EOF
-
-          if grep -RniE 'multipaper|MultiPaper|MULTIPAPER' . --exclude-dir=.git --exclude-dir=.gradle --exclude-dir=build; then
-            echo 'ERROR: forbidden MultiPaper reference remains'
-            exit 1
-          fi
           test -d folia-api
           test -d folia-server
           test -d folia-checkstyle
           test -d build-data
           grep -q '^mcVersion=26.2$' gradle.properties
           grep -q '^apiVersion=26.2$' gradle.properties
+          grep -q '^paperRef=5d4f9bd0e4f6b1ef70d07feb411580cef7d1a746$' gradle.properties
           ./gradlew applyAllPatches --stacktrace
           ./gradlew build --stacktrace
-
+          if grep -RniE 'multipaper|MultiPaper|MULTIPAPER' . --exclude-dir=.git --exclude-dir=.gradle --exclude-dir=build; then exit 1; fi
           git config user.email 'no-reply@github.com'
           git config user.name 'Github Actions'
           git add -A
