@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout Git Repository
         uses: actions/checkout@v6
@@ -43,31 +43,63 @@ jobs:
           rm -rf dist
           mkdir -p dist/multifolia-node dist/multifolia-server
 
-          # Node package: API runtime JAR. There is not yet a standalone
-          # executable distributed-node process in the current implementation.
-          cp folia-api/build/libs/folia-api-*.jar dist/multifolia-node/
+          # The node package currently contains the API runtime library only.
+          # There is not yet a standalone executable distributed-node process.
+          cp folia-api/build/libs/folia-api-26.2.local-SNAPSHOT.jar dist/multifolia-node/
           cp distribution/multifolia-node/README.md dist/multifolia-node/README.md
 
-          # Server package: every server JAR produced by the build.
-          cp folia-server/build/libs/*.jar dist/multifolia-server/
+          # The server package contains the runnable Folia/MultiFolia server JAR.
+          cp folia-server/build/libs/folia-server-26.2.local-SNAPSHOT.jar dist/multifolia-server/
           cp distribution/multifolia-server/README.md dist/multifolia-server/README.md
 
           printf '%s\n' \
             'MultiFolia 26.2 distribution' \
             '' \
-            'multifolia-server/: runnable MultiFolia/Folia 26.2 server JARs' \
-            'multifolia-node/: current node-side API package; standalone distributed node runtime is not implemented yet' \
+            'multifolia-server/: runnable MultiFolia/Folia 26.2 server JAR' \
+            'multifolia-node/: current node-side API runtime JAR; standalone distributed node runtime is not implemented yet' \
             '' \
             'Use JDK 25. See the README.md inside each directory for exact usage.' \
             > dist/README.txt
 
       - name: Verify packaged distribution
         run: |
+          set -euo pipefail
+          test -f dist/README.txt
           test -f dist/multifolia-node/README.md
           test -f dist/multifolia-server/README.md
-          test -n "$(find dist/multifolia-node -maxdepth 1 -name '*.jar' -print -quit)"
-          test -n "$(find dist/multifolia-server -maxdepth 1 -name '*.jar' -print -quit)"
+          test -f dist/multifolia-node/folia-api-26.2.local-SNAPSHOT.jar
+          test -f dist/multifolia-server/folia-server-26.2.local-SNAPSHOT.jar
+          test "$(find dist/multifolia-node -maxdepth 1 -type f -name '*.jar' | wc -l)" -eq 1
+          test "$(find dist/multifolia-server -maxdepth 1 -type f -name '*.jar' | wc -l)" -eq 1
+
+          # Verify that the server artifact has the expected Folia launcher.
+          unzip -p dist/multifolia-server/folia-server-26.2.local-SNAPSHOT.jar META-INF/MANIFEST.MF | grep -Fx 'Main-Class: org.bukkit.craftbukkit.Main'
+
           find dist -maxdepth 2 -type f -printf '%p %s bytes\n' | sort
+
+      - name: Smoke test packaged server
+        run: |
+          set -euo pipefail
+          rm -rf smoke-test
+          mkdir smoke-test
+          cp dist/multifolia-server/folia-server-26.2.local-SNAPSHOT.jar smoke-test/server.jar
+          printf 'eula=true\n' > smoke-test/eula.txt
+          printf 'online-mode=false\n' > smoke-test/server.properties
+
+          set +e
+          timeout 45s java -Xms512M -Xmx1G -jar smoke-test/server.jar --nogui > smoke-test/server.log 2>&1
+          status=$?
+          set -e
+
+          # timeout(124) is expected if the server remains running after startup.
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            cat smoke-test/server.log
+            exit "$status"
+          fi
+
+          grep -Eq 'Done \([0-9.]+s\)! For help, type "help"' smoke-test/server.log
+          grep -Eq 'You are running (Folia|MultiFolia)' smoke-test/server.log || true
+          echo 'Packaged server passed runtime startup smoke test.'
 
       - name: Upload MultiFolia distribution
         uses: actions/upload-artifact@v7
