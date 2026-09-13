@@ -41,13 +41,13 @@ public class MPDebugCommand extends Command implements Runnable {
         }
 
         if (debugEnabled.remove(player)) {
-            player.sendMessage("MultiPaper debug disabled");
+            player.sendMessage("MultiFolia debug disabled");
             return false;
         }
 
         debugEnabled.add(player);
 
-        sender.sendMessage("MultiPaper debug enabled");
+        sender.sendMessage("MultiFolia debug enabled");
 
         if (task == null) {
             run();
