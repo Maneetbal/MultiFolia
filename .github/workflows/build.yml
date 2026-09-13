@@ -83,10 +83,8 @@ jobs:
           # Verify that the runnable artifact has the expected Folia launcher.
           unzip -p dist/multifolia-server/multifolia-server.jar META-INF/MANIFEST.MF | grep 'Main-Class: org.bukkit.craftbukkit.Main'
 
-          # Verify this is the generated Paperclip distribution rather than
-          # the classes-only folia-server JAR.
-          test "$(stat -c '%s' dist/multifolia-server/multifolia-server.jar)" -gt 30000000
-
+          # Do not infer runtime correctness from file size; the smoke test
+          # below is the authoritative verification of the packaged server.
           find dist -maxdepth 2 -type f -printf '%p %s bytes\n' | sort
 
       - name: Smoke test packaged server
