@@ -44,7 +44,7 @@ jobs:
       - name: Verify clean MultiFolia tree
         run: |
           set -euo pipefail
-          if grep -RniE 'multipaper|MultiPaper|MULTIPAPER' . --exclude-dir=.git --exclude-dir=.gradle --exclude-dir=build --exclude='.github/workflows/bootstrap-pr.yml' --exclude='.github/workflows/bootstrap-folia.yml'; then
+          if grep -RniE 'multipaper|MultiPaper|MULTIPAPER' . --exclude-dir=.git --exclude-dir=.gradle --exclude-dir=build --exclude='bootstrap-pr.yml' --exclude='bootstrap-folia.yml'; then
             echo 'Forbidden MultiPaper reference remains outside temporary migration workflows'
             exit 1
           fi
