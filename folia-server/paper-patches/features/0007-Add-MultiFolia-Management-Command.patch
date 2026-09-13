@@ -8,6 +8,7 @@ command is intentionally observational: it reports the local control-plane
 state and does not bypass Folia's region scheduler or ownership checks.
 
 diff --git a/src/main/java/io/papermc/paper/command/PaperCommands.java b/src/main/java/io/papermc/paper/command/PaperCommands.java
+index 6216147f4d4c04ba616375430a91232d5ebe838..6216147f4d4c04ba616375430a91232d5ebe838 100644
 --- a/src/main/java/io/papermc/paper/command/PaperCommands.java
 +++ b/src/main/java/io/papermc/paper/command/PaperCommands.java
 @@ -23,4 +23,5 @@ public final class PaperCommands {
